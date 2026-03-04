@@ -11,4 +11,4 @@
 #### Gradle: 8.0
 #### Language: Java
 #### DSL: Groovy DSL
-#### API: 24 – 35 (Android 7.0 – Android 15)
+#### API: 13 – 35 (Android 7.0 – Android 15)

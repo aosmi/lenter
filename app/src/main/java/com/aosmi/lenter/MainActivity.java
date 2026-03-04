@@ -22,7 +22,7 @@ package com.aosmi.lenter;
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
- 
+
 // импорты
 import android.app.Activity;
 import android.content.Context;
@@ -90,9 +90,12 @@ protected void onCreate(Bundle savedInstanceState) {
         btn.setTextColor(0xFFFFFFFF);
         btn.setBackgroundColor(0xFF252525);
         btn.setPadding(80, 40, 80, 40);
-        btn.setOnClickListener(v ->
-            startActivity(new Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
-        );
+        btn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivity(new Intent(Settings.ACTION_INPUT_METHOD_SETTINGS));
+            }
+        });
 
         FrameLayout btnWrap = new FrameLayout(this);
         btnWrap.addView(btn);
