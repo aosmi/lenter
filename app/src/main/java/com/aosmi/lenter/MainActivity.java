@@ -1,4 +1,5 @@
 package com.aosmi.lenter;
+
 /*
  * MIT License
  *
@@ -30,12 +31,13 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.*;
 import android.inputmethodservice.InputMethodService;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.text.TextPaint;
-import android.util.SparseArray;
+import android.util.DisplayMetrics;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
@@ -43,16 +45,22 @@ import android.view.inputmethod.InputConnection;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.util.DisplayMetrics;
-import java.util.Locale;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 /* *** приложение *** */
 
 public class MainActivity extends Activity {
 
-@Override
-protected void onCreate(Bundle savedInstanceState) {
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         LinearLayout root = new LinearLayout(this);
@@ -190,12 +198,16 @@ protected void onCreate(Bundle savedInstanceState) {
         }
     }
 
-
 /* *** клавиатура *** */
 
     public static class KeyboardView extends View {
-      
-      // переменные
+
+        private final Rect tempRect = new Rect();
+        private final RectF tempRectF = new RectF();
+        private final Rect tempSrcRect = new Rect();
+        private final RectF tempDstRectF = new RectF();
+
+        // переменные
         private static final int BG = Color.BLACK;
         private static final int KEY = 0xFF252525;
         private static final int SPECIAL = 0xFF1A1A1A;
@@ -205,6 +217,11 @@ protected void onCreate(Bundle savedInstanceState) {
         private static final int T_CHAR = 0, T_SHIFT = 1, T_LANG = 2, T_ENTER = 3, T_SPACE = 4,
                 T_DEL = 5, T_SYM = 8, T_SYM_EX = 9, T_ABC = 10;
 
+        private static final int LANG_RU = 0;
+        private static final int LANG_EN = 1;
+        private static final int LANG_SYM = 2;
+        private static final int LANG_EXTRA = 3;
+
         private static final String SHIFT_NORMAL = "⇧";
         private static final String SHIFT_SINGLE = "⬆";
         private static final String SHIFT_LOCK = "⟰";
@@ -212,36 +229,46 @@ protected void onCreate(Bundle savedInstanceState) {
         private final Paint p1 = new Paint();
         private final Paint p2 = new Paint();
         private final Paint pH = new Paint();
-        
         private final TextPaint pText = new TextPaint(Paint.ANTI_ALIAS_FLAG);
         private final Paint pPre = new Paint();
         private final TextPaint pPreT = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint pAtlas = new Paint();
 
         private LenterIME ime;
         private int screenW;
         private float keyH;
         private float textBaselineOffset, previewBaselineOffset;
-        private String curL = "ru", lastL = "ru";
+        private float density;
+        private int previewHeight;
+
+        private int curLang = LANG_RU;
+        private int lastLang = LANG_RU;
         private int shift = 0;
 
-        private final float[] keyCoords;
-        private final String[] labels;
-        private final String[] values;
-        private final int[] types;
-        private int count = 0;
+        private static class LayoutData {
+            float[] keyCoords;
+            String[] labels;
+            String[] values;
+            int[] types;
+            int count;
+            int[][] grid = new int[4][32];
+            int[] gridCount = new int[4];
+            short[] hitmap;
+            int hitmapW, hitmapH;
+            int[] normalIdx;
+            int[] shiftIdx;
+            Bitmap atlas;
+            int atlasCellW, atlasCellH, atlasCols;
+        }
 
-        private final int[][] grid = new int[4][32];
-        private final int[] gridCount = new int[4];
+        private LayoutData[] layouts = new LayoutData[4];
+        private LayoutData curLayout;
 
-        private Bitmap bgBitmap;
-        private Canvas bgCanvas;
-        private boolean needRedrawBg = true;
-        private int prevWidth = -1, prevHeight = -1;
+        private int[] pointerIds = new int[10];
+        private int[] pointerKeys = new int[10];
 
-        private final SparseArray<Integer> pointers = new SparseArray<>(4);
         private final Handler h = new Handler(Looper.getMainLooper());
         private boolean isDel = false;
-
         private final Runnable delRunnable = new Runnable() {
             @Override
             public void run() {
@@ -252,12 +279,13 @@ protected void onCreate(Bundle savedInstanceState) {
             }
         };
 
-        private float density;
-        private int previewHeight;
         private final char[] tmpChar = new char[1];
 
         public KeyboardView(Context ctx) {
             super(ctx);
+            if (Build.VERSION.SDK_INT >= 11) {
+                setLayerType(LAYER_TYPE_SOFTWARE, null);
+            }
             DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
             density = dm.density;
             screenW = dm.widthPixels;
@@ -277,15 +305,26 @@ protected void onCreate(Bundle savedInstanceState) {
             pPreT.setColor(Color.WHITE);
             pPreT.setTextAlign(Paint.Align.CENTER);
             pPreT.setTextSize(fontSizePreview);
+            pAtlas.setColor(Color.WHITE);
+            pAtlas.setAlpha(255);
 
             textBaselineOffset = (pText.descent() + pText.ascent()) / 2f;
             previewBaselineOffset = (pPreT.descent() + pPreT.ascent()) / 2f;
 
-            int maxKeys = 60;
-            keyCoords = new float[maxKeys * 4];
-            labels = new String[maxKeys];
-            values = new String[maxKeys];
-            types = new int[maxKeys];
+            Arrays.fill(pointerIds, -1);
+            Arrays.fill(pointerKeys, -1);
+
+            for (int i = 0; i < 4; i++) {
+                layouts[i] = new LayoutData();
+                layouts[i].keyCoords = new float[60 * 4];
+                layouts[i].labels = new String[60];
+                layouts[i].values = new String[60];
+                layouts[i].types = new int[60];
+                layouts[i].normalIdx = new int[60];
+                layouts[i].shiftIdx = new int[60];
+                Arrays.fill(layouts[i].normalIdx, -1);
+                Arrays.fill(layouts[i].shiftIdx, -1);
+            }
         }
 
         public void setImeService(LenterIME s) {
@@ -294,171 +333,264 @@ protected void onCreate(Bundle savedInstanceState) {
 
         public void setParams(int h, String l) {
             this.keyH = (h - previewHeight) / 4f;
-            this.lastL = (l.equals("sym") || l.equals("extra")) ? "ru" : l;
+            this.lastLang = (l.equals("ru") ? LANG_RU : LANG_EN);
             if (screenW > 0) {
                 gen(l);
             }
         }
 
         public void setLanguage(String lang) {
-            lastL = lang;
+            lastLang = (lang.equals("ru") ? LANG_RU : LANG_EN);
             gen(lang);
         }
 
 // раскладка
         private void gen(String type) {
-            curL = type;
-            count = 0;
-            for (int i = 0; i < 4; i++) gridCount[i] = 0;
+            int langIdx;
+            if (type.equals("ru")) langIdx = LANG_RU;
+            else if (type.equals("en")) langIdx = LANG_EN;
+            else if (type.equals("sym")) langIdx = LANG_SYM;
+            else langIdx = LANG_EXTRA;
+
+            curLang = langIdx;
+            LayoutData d = layouts[langIdx];
+            d.count = 0;
+            for (int i = 0; i < 4; i++) d.gridCount[i] = 0;
 
             float y = 0, w;
-            if (type.equals("ru")) {
+            if (langIdx == LANG_RU) {
                 w = screenW / 11f;
-                row(y, w, "йцукенгшщзх");
+                row(d, y, w, "йцукенгшщзх");
                 y += keyH;
-                row(y, w, "фывапролджэ");
+                row(d, y, w, "фывапролджэ");
                 y += keyH;
-                k(SHIFT_NORMAL, "SH", T_SHIFT, 0, y, w * 1.5f);
-                rowW(y, w * 1.5f, (screenW - w * 3f) / 9f, "ячсмитьбю");
-                k("⌫", "DEL", T_DEL, screenW - w * 1.5f, y, w * 1.5f);
+                k(d, SHIFT_NORMAL, "SH", T_SHIFT, 0, y, w * 1.5f);
+                rowW(d, y, w * 1.5f, (screenW - w * 3f) / 9f, "ячсмитьбю");
+                k(d, "⌫", "DEL", T_DEL, screenW - w * 1.5f, y, w * 1.5f);
                 y += keyH;
-                drawBottom(y);
-            } else if (type.equals("en")) {
+                drawBottom(d, y);
+            } else if (langIdx == LANG_EN) {
                 w = screenW / 10f;
-                row(y, w, "qwertyuiop");
+                row(d, y, w, "qwertyuiop");
                 y += keyH;
-                rowW(y, w * 0.5f, w, "asdfghjkl");
+                rowW(d, y, w * 0.5f, w, "asdfghjkl");
                 y += keyH;
-                k(SHIFT_NORMAL, "SH", T_SHIFT, 0, y, w * 1.5f);
-                rowW(y, w * 1.5f, w, "zxcvbnm");
-                k("⌫", "DEL", T_DEL, screenW - w * 1.5f, y, w * 1.5f);
+                k(d, SHIFT_NORMAL, "SH", T_SHIFT, 0, y, w * 1.5f);
+                rowW(d, y, w * 1.5f, w, "zxcvbnm");
+                k(d, "⌫", "DEL", T_DEL, screenW - w * 1.5f, y, w * 1.5f);
                 y += keyH;
-                drawBottom(y);
-            } else if (type.equals("sym")) {
+                drawBottom(d, y);
+            } else if (langIdx == LANG_SYM) {
                 w = screenW / 10f;
-                row(y, w, "1234567890");
+                row(d, y, w, "1234567890");
                 y += keyH;
-                row(y, w, "@#№_&-+()/");
+                row(d, y, w, "@#№_&-+()/");
                 y += keyH;
-                k("=\\<", "EX", T_SYM_EX, 0, y, w * 1.5f);
-                rowW(y, w * 1.5f, w, "*\"':;!?");
-                k("⌫", "DEL", T_DEL, screenW - w * 1.5f, y, w * 1.5f);
+                k(d, "=\\<", "EX", T_SYM_EX, 0, y, w * 1.5f);
+                rowW(d, y, w * 1.5f, w, "*\"':;!?");
+                k(d, "⌫", "DEL", T_DEL, screenW - w * 1.5f, y, w * 1.5f);
                 y += keyH;
-                drawBottom(y);
-            } else if (type.equals("extra")) {
+                drawBottom(d, y);
+            } else {
                 w = screenW / 11f;
-                row(y, w, "~`|•√π÷×¶∆●");
+                row(d, y, w, "~`|•√π÷×¶∆●");
                 y += keyH;
-                row(y, w, "€$£¥₸₽^°={}");
+                row(d, y, w, "€$£¥₸₽^°={}");
                 y += keyH;
-                k("?12", "SYM", T_SYM, 0, y, w * 1.5f);
-                rowW(y, w * 1.5f, w, "\\©®™%[]■");
-                k("⌫", "DEL", T_DEL, screenW - w * 1.5f, y, w * 1.5f);
+                k(d, "?12", "SYM", T_SYM, 0, y, w * 1.5f);
+                rowW(d, y, w * 1.5f, w, "\\©®™%[]■");
+                k(d, "⌫", "DEL", T_DEL, screenW - w * 1.5f, y, w * 1.5f);
                 y += keyH;
-                drawBottom(y);
+                drawBottom(d, y);
             }
+
+            buildAtlas(d);
+            buildHitmap(d);
+            curLayout = d;
             needRedrawBg = true;
             invalidate();
         }
 
 // todo: сделать чтобы клава не вылезала вне закона (исправлено)
-private void drawBottom(float y) {
-    float wSymWeight = 1.5f;
-    float wCommaWeight = 1.0f;
-    float wLangWeight = 1.3f;
-    float wExtraWeight = curL.equals("ru") ? 1.0f : 0f;
-    float wSpaceWeight = 3.5f;
-    float wExtraRightWeight = curL.equals("ru") ? 1.0f : 0f;
-    float wDotWeight = 1.0f;
-    float wEnterWeight = 1.7f;
+        private void drawBottom(LayoutData d, float y) {
+            float wSymWeight = 1.5f;
+            float wCommaWeight = 1.0f;
+            float wLangWeight = 1.3f;
+            float wExtraWeight = (curLang == LANG_RU) ? 1.0f : 0f;
+            float wSpaceWeight = 3.5f;
+            float wExtraRightWeight = (curLang == LANG_RU) ? 1.0f : 0f;
+            float wDotWeight = 1.0f;
+            float wEnterWeight = 1.7f;
 
-    float totalWeight = wSymWeight + wCommaWeight + wLangWeight + 
-                        wExtraWeight + wSpaceWeight + wExtraRightWeight + 
-                        wDotWeight + wEnterWeight;
+            float totalWeight = wSymWeight + wCommaWeight + wLangWeight +
+                    wExtraWeight + wSpaceWeight + wExtraRightWeight +
+                    wDotWeight + wEnterWeight;
 
-    float unit = screenW / totalWeight;
-    float x = 0;
+            float unit = screenW / totalWeight;
+            float x = 0;
 
-    float w = wSymWeight * unit;
-    String label = (curL.equals("ru") || curL.equals("en")) ? "?12" : "ABC";
-    int type = (curL.equals("ru") || curL.equals("en")) ? T_SYM : T_ABC;
-    k(label, "SYM_TOGGLE", type, x, y, w);
-    x += w;
+            float w = wSymWeight * unit;
+            String label = (curLang == LANG_RU || curLang == LANG_EN) ? "?12" : "ABC";
+            int type = (curLang == LANG_RU || curLang == LANG_EN) ? T_SYM : T_ABC;
+            k(d, label, "SYM_TOGGLE", type, x, y, w);
+            x += w;
 
-    w = wCommaWeight * unit;
-    String comma = curL.equals("extra") ? "<" : ",";
-    k(comma, comma, T_CHAR, x, y, w);
-    x += w;
+            w = wCommaWeight * unit;
+            String comma = (curLang == LANG_EXTRA) ? "<" : ",";
+            k(d, comma, comma, T_CHAR, x, y, w);
+            x += w;
 
-    w = wLangWeight * unit;
-    k(lastL.equals("ru") ? "RU" : "EN", "L", T_LANG, x, y, w);
-    x += w;
+            w = wLangWeight * unit;
+            k(d, (lastLang == LANG_RU) ? "RU" : "EN", "L", T_LANG, x, y, w);
+            x += w;
 
-    if (curL.equals("ru")) {
-        w = wExtraWeight * unit;
-        k("ё", "ё", T_CHAR, x, y, w);
-        x += w;
-    }
+            if (curLang == LANG_RU) {
+                w = wExtraWeight * unit;
+                k(d, "ё", "ё", T_CHAR, x, y, w);
+                x += w;
+            }
 
-    w = wSpaceWeight * unit;
-    k(" ", " ", T_SPACE, x, y, w);
-    x += w;
+            w = wSpaceWeight * unit;
+            k(d, " ", " ", T_SPACE, x, y, w);
+            x += w;
 
-    if (curL.equals("ru")) {
-        w = wExtraRightWeight * unit;
-        k("ъ", "ъ", T_CHAR, x, y, w);
-        x += w;
-    }
+            if (curLang == LANG_RU) {
+                w = wExtraRightWeight * unit;
+                k(d, "ъ", "ъ", T_CHAR, x, y, w);
+                x += w;
+            }
 
-    w = wDotWeight * unit;
-    String dot = curL.equals("extra") ? ">" : ".";
-    k(dot, dot, T_CHAR, x, y, w);
-    x += w;
+            w = wDotWeight * unit;
+            String dot = (curLang == LANG_EXTRA) ? ">" : ".";
+            k(d, dot, dot, T_CHAR, x, y, w);
+            x += w;
 
-    float enterWidth = screenW - x;
-    if (enterWidth < 0) enterWidth = 0;
-    k("↵", "\n", T_ENTER, x, y, enterWidth);
-}
+            float enterWidth = screenW - x;
+            if (enterWidth < 0) enterWidth = 0;
+            k(d, "↵", "\n", T_ENTER, x, y, enterWidth);
+        }
 
-        private void k(String l, String v, int t, float x, float y, float w) {
-            int base = count * 4;
-            keyCoords[base] = x;
-            keyCoords[base + 1] = y;
-            keyCoords[base + 2] = x + w;
-            keyCoords[base + 3] = y + keyH;
+        private void k(LayoutData d, String l, String v, int t, float x, float y, float w) {
+            int base = d.count * 4;
+            d.keyCoords[base] = x;
+            d.keyCoords[base + 1] = y;
+            d.keyCoords[base + 2] = x + w;
+            d.keyCoords[base + 3] = y + keyH;
 
-            labels[count] = l;
-            values[count] = v;
-            types[count] = t;
+            d.labels[d.count] = l;
+            d.values[d.count] = v;
+            d.types[d.count] = t;
 
             int r = (int) (y / keyH);
-            if (r >= 0 && r < 4) grid[r][gridCount[r]++] = count;
-            count++;
+            if (r >= 0 && r < 4) d.grid[r][d.gridCount[r]++] = d.count;
+            d.count++;
         }
 
-        private void row(float y, float w, String c) {
+        private void row(LayoutData d, float y, float w, String c) {
             int len = c.length();
             for (int i = 0; i < len; i++) {
                 char ch = c.charAt(i);
-                k(String.valueOf(ch), String.valueOf(ch), T_CHAR, i * w, y, w);
+                k(d, String.valueOf(ch), String.valueOf(ch), T_CHAR, i * w, y, w);
             }
         }
 
-        private void rowW(float y, float sx, float w, String c) {
+        private void rowW(LayoutData d, float y, float sx, float w, String c) {
             int len = c.length();
             for (int i = 0; i < len; i++) {
                 char ch = c.charAt(i);
-                k(String.valueOf(ch), String.valueOf(ch), T_CHAR, sx + i * w, y, w);
+                k(d, String.valueOf(ch), String.valueOf(ch), T_CHAR, sx + i * w, y, w);
             }
         }
+// todo: оптимизировать клавиатуру (сделано)
+        private void buildAtlas(LayoutData d) {
+            Set<Character> chars = new HashSet<>();
+            for (int i = 0; i < d.count; i++) {
+                if (d.types[i] == T_CHAR) {
+                    char c = d.labels[i].charAt(0);
+                    chars.add(c);
+                    if (Character.isLetter(c)) {
+                        chars.add(Character.toUpperCase(c));
+                    }
+                }
+            }
+            List<Character> list = new ArrayList<>(chars);
+            Collections.sort(list, new Comparator<Character>() {
+                public int compare(Character a, Character b) {
+                    return a.compareTo(b);
+                }
+            });
+
+            d.atlasCellW = (int) pText.measureText("W") + 4;
+            d.atlasCellH = (int) (pText.getFontSpacing() + 2);
+            d.atlasCols = list.size();
+            int atlasWidth = d.atlasCols * d.atlasCellW;
+            int atlasHeight = d.atlasCellH;
+
+            if (d.atlas == null || d.atlas.getWidth() != atlasWidth || d.atlas.getHeight() != atlasHeight) {
+                d.atlas = Bitmap.createBitmap(atlasWidth, atlasHeight, Bitmap.Config.ALPHA_8);
+                Canvas c = new Canvas(d.atlas);
+                Paint paint = new Paint(pText);
+                paint.setColor(Color.WHITE);
+                for (int i = 0; i < list.size(); i++) {
+                    char ch = list.get(i);
+                    float x = i * d.atlasCellW + d.atlasCellW / 2f;
+                    float y = (d.atlasCellH - pText.descent() - pText.ascent()) / 2f;
+                    c.drawText(String.valueOf(ch), x, y, paint);
+                }
+            }
+
+            for (int i = 0; i < d.count; i++) {
+                if (d.types[i] == T_CHAR) {
+                    char c = d.labels[i].charAt(0);
+                    char cu = Character.toUpperCase(c);
+                    d.normalIdx[i] = list.indexOf(c);
+                    d.shiftIdx[i] = list.indexOf(cu);
+                } else {
+                    d.normalIdx[i] = -1;
+                    d.shiftIdx[i] = -1;
+                }
+            }
+        }
+
+        private static final int HITMAP_SCALE = 4;
+
+        private void buildHitmap(LayoutData d) {
+            d.hitmapW = screenW / HITMAP_SCALE + 1;
+            d.hitmapH = (int) (keyH * 4) / HITMAP_SCALE + 1;
+            int size = d.hitmapW * d.hitmapH;
+            if (d.hitmap == null || d.hitmap.length != size) {
+                d.hitmap = new short[size];
+            }
+            Arrays.fill(d.hitmap, (short) -1);
+
+            for (int i = 0; i < d.count; i++) {
+                int base = i * 4;
+                int l = Math.max(0, (int) d.keyCoords[base]) / HITMAP_SCALE;
+                int t = Math.max(0, (int) d.keyCoords[base + 1]) / HITMAP_SCALE;
+                int r = Math.min(d.hitmapW - 1, (int) Math.ceil(d.keyCoords[base + 2]) / HITMAP_SCALE);
+                int b = Math.min(d.hitmapH - 1, (int) Math.ceil(d.keyCoords[base + 3]) / HITMAP_SCALE);
+                for (int y = t; y <= b; y++) {
+                    int off = y * d.hitmapW;
+                    for (int x = l; x <= r; x++) {
+                        d.hitmap[off + x] = (short) i;
+                    }
+                }
+            }
+        }
+
+        private Bitmap bgBitmap;
+        private Canvas bgCanvas;
+        private boolean needRedrawBg = true;
+        private int prevWidth = -1, prevHeight = -1;
 
         @Override
         protected void onSizeChanged(int w, int h, int oldw, int oldh) {
             super.onSizeChanged(w, h, oldw, oldh);
             screenW = w;
             keyH = (h - previewHeight) / 4f;
-            if (curL != null) {
-                gen(curL);
+            if (curLayout != null) {
+                int lang = curLang;
+                gen(lang == LANG_RU ? "ru" : lang == LANG_EN ? "en" : lang == LANG_SYM ? "sym" : "extra");
             }
             needRedrawBg = true;
         }
@@ -481,32 +613,47 @@ private void drawBottom(float y) {
 
             canvas.drawBitmap(bgBitmap, 0, 0, null);
 
-            int pointersSize = pointers.size();
-            for (int p = 0; p < pointersSize; p++) {
-                int idx = pointers.valueAt(p);
-                if (idx >= count) continue;
+            LayoutData d = curLayout;
+            if (d == null) return;
 
-                int base = idx * 4;
-                float l = keyCoords[base] + GAP;
-                float t = keyCoords[base + 1] + GAP + previewHeight;
-                float r = keyCoords[base + 2] - GAP;
-                float b = keyCoords[base + 3] - GAP + previewHeight;
+            for (int i = 0; i < pointerKeys.length; i++) {
+                int key = pointerKeys[i];
+                if (key < 0 || key >= d.count) continue;
 
-                canvas.drawRect(l, t, r, b, pH);
+                int base = key * 4;
+                float l = d.keyCoords[base] + GAP;
+                float t = d.keyCoords[base + 1] + GAP + previewHeight;
+                float r = d.keyCoords[base + 2] - GAP;
+                float b = d.keyCoords[base + 3] - GAP + previewHeight;
 
-                if (types[idx] == T_CHAR && !values[idx].equals(" ")) {
+                tempRect.set((int) l, (int) t, (int) r, (int) b);
+                canvas.drawRect(tempRect, pH);
+
+                if (d.types[key] == T_CHAR && !d.values[key].equals(" ")) {
                     float cx = (l + r) / 2;
                     float pT = t - previewHeight;
                     float pB = t;
-                    canvas.drawRect(cx - 50, pT, cx + 50, pB, pPre);
+                    tempRectF.set(cx - 50, pT, cx + 50, pB);
+                    canvas.drawRect(tempRectF, pPre);
 
-                    char ch = labels[idx].charAt(0);
-                    if (shift > 0) {
-                        ch = Character.toUpperCase(ch);
+                    int idx = (shift > 0) ? d.shiftIdx[key] : d.normalIdx[key];
+                    if (idx >= 0) {
+                        int col = idx % d.atlasCols;
+                        int row = idx / d.atlasCols;
+                        tempSrcRect.set(col * d.atlasCellW, row * d.atlasCellH,
+                                (col + 1) * d.atlasCellW, (row + 1) * d.atlasCellH);
+                        float cyPreview = (pT + pB) * 0.5f;
+                        float halfW = d.atlasCellW * 0.5f;
+                        float halfH = d.atlasCellH * 0.5f;
+                        tempDstRectF.set(cx - halfW, cyPreview - halfH, cx + halfW, cyPreview + halfH);
+                        canvas.drawBitmap(d.atlas, tempSrcRect, tempDstRectF, pAtlas);
+                    } else {
+                        char ch = d.labels[key].charAt(0);
+                        if (shift > 0) ch = Character.toUpperCase(ch);
+                        tmpChar[0] = ch;
+                        canvas.drawText(tmpChar, 0, 1, cx,
+                                (pT + pB) / 2f - previewBaselineOffset, pPreT);
                     }
-                    tmpChar[0] = ch;
-                    canvas.drawText(tmpChar, 0, 1, cx,
-                            (pT + pB) / 2f - previewBaselineOffset, pPreT);
                 }
             }
         }
@@ -514,21 +661,24 @@ private void drawBottom(float y) {
         private void drawStatic(Canvas cv) {
             cv.drawColor(BG);
 
-            for (int i = 0; i < count; i++) {
+            LayoutData d = curLayout;
+            if (d == null) return;
+
+            for (int i = 0; i < d.count; i++) {
                 int base = i * 4;
-                float l = keyCoords[base] + GAP;
-                float t = keyCoords[base + 1] + GAP + previewHeight;
-                float r = keyCoords[base + 2] - GAP;
-                float b = keyCoords[base + 3] - GAP + previewHeight;
+                float l = d.keyCoords[base] + GAP;
+                float t = d.keyCoords[base + 1] + GAP + previewHeight;
+                float r = d.keyCoords[base + 2] - GAP;
+                float b = d.keyCoords[base + 3] - GAP + previewHeight;
 
                 Paint p;
-                if (types[i] == T_CHAR || types[i] == T_SPACE) {
+                if (d.types[i] == T_CHAR || d.types[i] == T_SPACE) {
                     p = p1;
                 } else {
                     p = p2;
                 }
 
-                if (types[i] == T_SHIFT && shift == 2) {
+                if (d.types[i] == T_SHIFT && shift == 2) {
                     cv.drawRect(l, t, r, b, pH);
                 } else {
                     cv.drawRect(l, t, r, b, p);
@@ -537,21 +687,31 @@ private void drawBottom(float y) {
                 float cx = (l + r) / 2;
                 float cy = (t + b) / 2;
 
-                if (types[i] == T_CHAR) {
-                    char ch = labels[i].charAt(0);
-                    if (shift > 0) {
-                        ch = Character.toUpperCase(ch);
+                if (d.types[i] == T_CHAR) {
+                    int idx = (shift > 0) ? d.shiftIdx[i] : d.normalIdx[i];
+                    if (idx >= 0) {
+                        int col = idx % d.atlasCols;
+                        int row = idx / d.atlasCols;
+                        tempSrcRect.set(col * d.atlasCellW, row * d.atlasCellH,
+                                (col + 1) * d.atlasCellW, (row + 1) * d.atlasCellH);
+                        float halfW = d.atlasCellW * 0.5f;
+                        float halfH = d.atlasCellH * 0.5f;
+                        tempDstRectF.set(cx - halfW, cy - halfH, cx + halfW, cy + halfH);
+                        cv.drawBitmap(d.atlas, tempSrcRect, tempDstRectF, pAtlas);
+                    } else {
+                        char ch = d.labels[i].charAt(0);
+                        if (shift > 0) ch = Character.toUpperCase(ch);
+                        tmpChar[0] = ch;
+                        cv.drawText(tmpChar, 0, 1, cx, cy - textBaselineOffset, pText);
                     }
-                    tmpChar[0] = ch;
-                    cv.drawText(tmpChar, 0, 1, cx, cy - textBaselineOffset, pText);
-                } else if (types[i] == T_SHIFT) {
+                } else if (d.types[i] == T_SHIFT) {
                     String shiftLabel;
                     if (shift == 1) shiftLabel = SHIFT_SINGLE;
                     else if (shift == 2) shiftLabel = SHIFT_LOCK;
                     else shiftLabel = SHIFT_NORMAL;
                     cv.drawText(shiftLabel, cx, cy - textBaselineOffset, pText);
                 } else {
-                    cv.drawText(labels[i], cx, cy - textBaselineOffset, pText);
+                    cv.drawText(d.labels[i], cx, cy - textBaselineOffset, pText);
                 }
             }
         }
@@ -562,12 +722,19 @@ private void drawBottom(float y) {
             int index = e.getActionIndex();
             int id = e.getPointerId(index);
 
+            LayoutData d = curLayout;
+            if (d == null) return true;
+
             if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
-                int k = getK(e.getX(index), e.getY(index) - previewHeight);
+                int k = getK(d, e.getX(index), e.getY(index) - previewHeight);
                 if (k != -1) {
                     performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP);
-                    pointers.put(id, k);
-                    if (types[k] == T_DEL) {
+                    int slot = findEmptyPointerSlot();
+                    if (slot >= 0) {
+                        pointerIds[slot] = id;
+                        pointerKeys[slot] = k;
+                    }
+                    if (d.types[k] == T_DEL) {
                         if (ime.deleteSelected()) {
                             isDel = false;
                             h.removeCallbacks(delRunnable);
@@ -577,9 +744,8 @@ private void drawBottom(float y) {
                             h.postDelayed(delRunnable, 350);
                         }
                     }
-                    Rect dirty = new Rect();
-                    getDirtyRect(k, dirty);
-                    invalidate(dirty);
+                    getDirtyRect(d, k, tempRect);
+                    invalidate(tempRect);
                 }
             } else if (action == MotionEvent.ACTION_MOVE) {
                 boolean changed = false;
@@ -587,48 +753,67 @@ private void drawBottom(float y) {
                 Rect tmp = new Rect();
                 for (int m = 0; m < e.getPointerCount(); m++) {
                     int pid = e.getPointerId(m);
-                    int nk = getK(e.getX(m), e.getY(m) - previewHeight);
-                    int oldK = pointers.get(pid, -1);
-                    if (oldK != nk) {
-                        if (oldK != -1) {
-                            getDirtyRect(oldK, tmp);
-                            dirty.union(tmp);
+                    int nk = getK(d, e.getX(m), e.getY(m) - previewHeight);
+                    int slot = findPointerSlot(pid);
+                    if (slot >= 0) {
+                        int oldK = pointerKeys[slot];
+                        if (oldK != nk) {
+                            if (oldK != -1) {
+                                getDirtyRect(d, oldK, tmp);
+                                dirty.union(tmp);
+                            }
+                            if (nk != -1) {
+                                pointerKeys[slot] = nk;
+                                getDirtyRect(d, nk, tmp);
+                                dirty.union(tmp);
+                            } else {
+                                pointerKeys[slot] = -1;
+                                pointerIds[slot] = -1;
+                            }
+                            changed = true;
                         }
-                        if (nk != -1) {
-                            pointers.put(pid, nk);
-                            getDirtyRect(nk, tmp);
+                    } else if (nk != -1) {
+                        int newSlot = findEmptyPointerSlot();
+                        if (newSlot >= 0) {
+                            pointerIds[newSlot] = pid;
+                            pointerKeys[newSlot] = nk;
+                            getDirtyRect(d, nk, tmp);
                             dirty.union(tmp);
-                        } else {
-                            pointers.remove(pid);
+                            changed = true;
                         }
-                        changed = true;
                     }
                 }
                 if (changed) invalidate(dirty);
             } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP) {
-                int k = pointers.get(id, -1);
-                if (k != -1) {
-                    if (types[k] != T_DEL) {
-                        handle(k);
+                int slot = findPointerSlot(id);
+                if (slot >= 0) {
+                    int k = pointerKeys[slot];
+                    if (k != -1) {
+                        if (d.types[k] != T_DEL) {
+                            handle(k);
+                        }
+                        pointerKeys[slot] = -1;
+                        pointerIds[slot] = -1;
+                        if (d.types[k] == T_DEL) {
+                            isDel = false;
+                            h.removeCallbacks(delRunnable);
+                        }
+                        getDirtyRect(d, k, tempRect);
+                        invalidate(tempRect);
                     }
-                    pointers.remove(id);
-                    if (types[k] == T_DEL) {
-                        isDel = false;
-                        h.removeCallbacks(delRunnable);
-                    }
-                    Rect dirty = new Rect();
-                    getDirtyRect(k, dirty);
-                    invalidate(dirty);
                 }
             } else if (action == MotionEvent.ACTION_CANCEL) {
                 Rect dirty = new Rect();
                 Rect tmp = new Rect();
-                for (int i = 0; i < pointers.size(); i++) {
-                    int k = pointers.valueAt(i);
-                    getDirtyRect(k, tmp);
-                    dirty.union(tmp);
+                for (int i = 0; i < pointerKeys.length; i++) {
+                    int k = pointerKeys[i];
+                    if (k != -1) {
+                        getDirtyRect(d, k, tmp);
+                        dirty.union(tmp);
+                        pointerKeys[i] = -1;
+                        pointerIds[i] = -1;
+                    }
                 }
-                pointers.clear();
                 isDel = false;
                 h.removeCallbacks(delRunnable);
                 if (!dirty.isEmpty()) invalidate(dirty);
@@ -636,32 +821,38 @@ private void drawBottom(float y) {
             return true;
         }
 
-        private int getK(float x, float y) {
-            if (y < 0 || y >= keyH * 4) return -1;
-            int r = (int) (y / keyH);
-            if (r >= 0 && r < 4) {
-                for (int j = 0; j < gridCount[r]; j++) {
-                    int i = grid[r][j];
-                    int base = i * 4;
-                    if (x >= keyCoords[base] && x <= keyCoords[base + 2]) {
-                        return i;
-                    }
-                }
-            }
-            return -1;
+        private int getK(LayoutData d, float x, float y) {
+            int ix = (int) x / HITMAP_SCALE;
+            int iy = (int) y / HITMAP_SCALE;
+            if (iy < 0 || iy >= d.hitmapH || ix < 0 || ix >= d.hitmapW) return -1;
+            return d.hitmap[iy * d.hitmapW + ix] & 0xffff;
         }
 
-        private void getDirtyRect(int idx, Rect outRect) {
+        private void getDirtyRect(LayoutData d, int idx, Rect outRect) {
             int base = idx * 4;
-            float left = keyCoords[base];
-            float top = keyCoords[base + 1];
-            float right = keyCoords[base + 2];
-            float bottom = keyCoords[base + 3] + previewHeight;
+            float left = d.keyCoords[base];
+            float top = d.keyCoords[base + 1];
+            float right = d.keyCoords[base + 2];
+            float bottom = d.keyCoords[base + 3] + previewHeight;
 
             outRect.left = (int) Math.floor(left);
             outRect.top = (int) Math.floor(top);
             outRect.right = (int) Math.ceil(right);
             outRect.bottom = (int) Math.ceil(bottom);
+        }
+
+        private int findEmptyPointerSlot() {
+            for (int i = 0; i < pointerIds.length; i++) {
+                if (pointerIds[i] == -1) return i;
+            }
+            return -1;
+        }
+
+        private int findPointerSlot(int id) {
+            for (int i = 0; i < pointerIds.length; i++) {
+                if (pointerIds[i] == id) return i;
+            }
+            return -1;
         }
 
 /*
@@ -706,8 +897,9 @@ private void handle(int i) {
 }
 */
         private void handle(int i) {
-            int t = types[i];
-            String v = values[i];
+            LayoutData d = curLayout;
+            int t = d.types[i];
+            String v = d.values[i];
 
             if (t == T_CHAR) {
                 if (shift > 0) {
@@ -727,21 +919,21 @@ private void handle(int i) {
             } else if (t == T_ENTER) {
                 ime.handleEnter();
             } else if (t == T_LANG) {
-                lastL = lastL.equals("en") ? "ru" : "en";
-                ime.saveLanguage(lastL);
-                gen(lastL);
+                lastLang = (lastLang == LANG_RU) ? LANG_EN : LANG_RU;
+                ime.saveLanguage(lastLang == LANG_RU ? "ru" : "en");
+                gen(lastLang == LANG_RU ? "ru" : "en");
             } else if (t == T_SYM) {
-                if (curL.equals("ru") || curL.equals("en")) {
+                if (curLang == LANG_RU || curLang == LANG_EN) {
                     gen("sym");
-                } else if (curL.equals("sym")) {
-                    gen(lastL);
-                } else if (curL.equals("extra")) {
+                } else if (curLang == LANG_SYM) {
+                    gen(lastLang == LANG_RU ? "ru" : "en");
+                } else if (curLang == LANG_EXTRA) {
                     gen("sym");
                 }
             } else if (t == T_SYM_EX) {
                 gen("extra");
             } else if (t == T_ABC) {
-                gen(lastL);
+                gen(lastLang == LANG_RU ? "ru" : "en");
             }
         }
     }
