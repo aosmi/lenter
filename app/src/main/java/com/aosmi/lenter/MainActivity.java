@@ -413,14 +413,14 @@ public class MainActivity extends Activity {
 
 // todo: сделать чтобы клава не вылезала вне закона (исправлено)
         private void drawBottom(LayoutData d, float y) {
-            float wSymWeight = 1.5f;
-            float wCommaWeight = 1.0f;
-            float wLangWeight = 1.3f;
-            float wExtraWeight = (curLang == LANG_RU) ? 1.0f : 0f;
-            float wSpaceWeight = 3.5f;
-            float wExtraRightWeight = (curLang == LANG_RU) ? 1.0f : 0f;
-            float wDotWeight = 1.0f;
-            float wEnterWeight = 1.7f;
+            float wSymWeight = 1.5f; // ?12
+            float wCommaWeight = 1.2f; // запятая
+            float wLangWeight = 1.3f; // ru/en
+            float wExtraWeight = (curLang == LANG_RU) ? 1.0f : 0f; // ё
+            float wSpaceWeight = 3.5f; // пробел
+            float wExtraRightWeight = (curLang == LANG_RU) ? 1.0f : 0f; // ъ
+            float wDotWeight = 1.2f; // точка
+            float wEnterWeight = 1.7f; // ентер
 
             float totalWeight = wSymWeight + wCommaWeight + wLangWeight +
                     wExtraWeight + wSpaceWeight + wExtraRightWeight +
@@ -453,7 +453,6 @@ public class MainActivity extends Activity {
             w = wSpaceWeight * unit;
             k(d, " ", " ", T_SPACE, x, y, w);
             x += w;
-
             if (curLang == LANG_RU) {
                 w = wExtraRightWeight * unit;
                 k(d, "ъ", "ъ", T_CHAR, x, y, w);
