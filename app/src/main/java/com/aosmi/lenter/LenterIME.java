@@ -42,10 +42,27 @@ import android.widget.LinearLayout;
 
 import java.util.*;
 
+// todo: разработка новой функции: разбитый экран
+
 public class LenterIME extends InputMethodService {
     private KeyboardView keyboardView;
     private int currentEnterAction = EditorInfo.IME_ACTION_UNSPECIFIED;
     private EditorInfo currentEditorInfo;
+
+    private static int sOffsetLeft = 0;
+    private static int sOffsetRight = 0;
+    private static int sOffsetTop = 0;
+    private static int sOffsetBottom = 0;
+    private static boolean sOffsetsChanged = false;
+
+    public static void updateOffsets(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences("LenterPrefs", MODE_PRIVATE);
+        sOffsetLeft = prefs.getInt("broken_left", 0);
+        sOffsetRight = prefs.getInt("broken_right", 0);
+        sOffsetTop = prefs.getInt("broken_top", 0);
+        sOffsetBottom = prefs.getInt("broken_bottom", 0);
+        sOffsetsChanged = true;
+    }
 
     @Override
     public View onCreateInputView() {
@@ -54,9 +71,18 @@ public class LenterIME extends InputMethodService {
         float density = getResources().getDisplayMetrics().density;
         int height = (int) (250 * density + 0.5f);
 
+        if (!sOffsetsChanged) {
+            sOffsetLeft = prefs.getInt("broken_left", 0);
+            sOffsetRight = prefs.getInt("broken_right", 0);
+            sOffsetTop = prefs.getInt("broken_top", 0);
+            sOffsetBottom = prefs.getInt("broken_bottom", 0);
+            sOffsetsChanged = true;
+        }
+
         keyboardView = new KeyboardView(this);
         keyboardView.setImeService(this);
         keyboardView.setParams(height, lang);
+        keyboardView.setOffsets(sOffsetLeft, sOffsetRight, sOffsetTop, sOffsetBottom);
 
         LinearLayout container = new LinearLayout(this);
         container.setClipChildren(false);
@@ -78,10 +104,10 @@ public class LenterIME extends InputMethodService {
                 keyboardView.setLanguage(lang);
             }
             keyboardView.setEnterIcon(getEnterIcon());
+            keyboardView.setOffsets(sOffsetLeft, sOffsetRight, sOffsetTop, sOffsetBottom);
         }
     }
 
-    // было изменено: раньше метод isNumericInput() ловил флаги пароля, из-за чего в текстовых полях с отключенным словарем (например в Acode) ошибочно включалась цифровая раскладка. Теперь проверяем только базовый класс поля
     public boolean isNumericInput() {
         if (currentEditorInfo == null) return false;
         int inputClass = currentEditorInfo.inputType & EditorInfo.TYPE_MASK_CLASS;
@@ -89,7 +115,6 @@ public class LenterIME extends InputMethodService {
                inputClass == EditorInfo.TYPE_CLASS_PHONE;
     }
 
-    // было изменено: раньше isDecimalInput() могла ошибочно срабатывать на текстовых полях, теперь сначала проверяем класс
     public boolean isDecimalInput() {
         if (currentEditorInfo == null) return false;
         int inputClass = currentEditorInfo.inputType & EditorInfo.TYPE_MASK_CLASS;
@@ -169,10 +194,6 @@ public class LenterIME extends InputMethodService {
         if (ic != null) ic.deleteSurroundingText(1, 0);
     }
 
-
-    // ==================== КЛАВИАТУРА ====================
- 
-    
     public static class KeyboardView extends View {
 
         private final Rect tempRect = new Rect();
@@ -197,9 +218,9 @@ public class LenterIME extends InputMethodService {
         private static final int LANG_DECIMAL = 5;
         private static final int TOTAL_LAYOUTS = 6;
 
-        private static final String SHIFT_NORMAL = "⇧";
-        private static final String SHIFT_SINGLE = "⬆";
-        private static final String SHIFT_LOCK = "⟰";
+        private static final char[] SHIFT_NORMAL = "⇧".toCharArray();
+        private static final char[] SHIFT_SINGLE = "⬆".toCharArray();
+        private static final char[] SHIFT_LOCK = "⟰".toCharArray();
 
         private final Paint p1 = new Paint();
         private final Paint p2 = new Paint();
@@ -220,27 +241,36 @@ public class LenterIME extends InputMethodService {
         private int lastLang = LANG_RU;
         private int shift = 0;
         private boolean numericMode = false;
+        private boolean isPreviewMode = false;
+
+        private int offsetLeft = 0;
+        private int offsetRight = 0;
+        private int offsetTop = 0;
+        private int offsetBottom = 0;
+        private float scale = 1f;
+        private float translateX = 0;
+        private float translateY = 0;
 
         private static class LayoutData {
             float[] keyCoords;
-            String[] labels;
-            String[] values;
-            int[] types;
+            char[][] labels;
+            int[] labelsLen;
+            char[][] values;
+            int[] valuesLen;
+            byte[] types;
             int count;
-            int[][] grid = new int[4][32];
+            byte[][] grid = new byte[4][32];
             int[] gridCount = new int[4];
             byte[] hitmap;
             int hitmapW, hitmapH;
-            int[] normalIdx;
-            int[] shiftIdx;
+            byte[] normalIdx;
+            byte[] shiftIdx;
             boolean isBuilt = false;
         }
 
         private LayoutData[] layouts = new LayoutData[TOTAL_LAYOUTS];
         private LayoutData curLayout;
 
-        // todo: ГЛОБАЛЬНЫЙ АТЛАС СИМВОЛОВ - раньше для каждой раскладки создавался свой атлас, что занимало лишнюю память.
-        // Теперь один общий атлас для всех символов. Исправлено наложение символов (проблема с квадратом ■ решена увеличением отступов)
         private static Bitmap sGlobalAtlas;
         private static int[] sCharToAtlasIndex;
         private static int sAtlasCols;
@@ -264,10 +294,8 @@ public class LenterIME extends InputMethodService {
         };
 
         private final char[] tmpChar = new char[1];
-        private String currentEnterIcon = "↵";
+        private char[] currentEnterIcon = "↵".toCharArray();
 
-        // todo: ПУЛ RECT'ОВ - раньше в onTouchEvent создавались новые Rect при каждом движении, что нагружало GC.
-        // Теперь переиспользуем три Rect'а, что снизило количество аллокаций до нуля
         private static class RectPool {
             private Rect rect1 = new Rect();
             private Rect rect2 = new Rect();
@@ -284,7 +312,6 @@ public class LenterIME extends InputMethodService {
         }
         private RectPool rectPool = new RectPool();
 
-        // todo: РЕЖИМ СЛАБЫХ УСТРОЙСТВ - автоматически отключает превью и кэширование фона на устройствах с <512 MB RAM или <=2 ядрами
         private boolean lowEndMode;
 
         private boolean isLowEndDevice() {
@@ -304,8 +331,6 @@ public class LenterIME extends InputMethodService {
             lowEndMode = isLowEndDevice();
 
             if (Build.VERSION.SDK_INT >= 11) {
-                // было изменено: раньше было setLayerType(LAYER_TYPE_SOFTWARE, null) - отключало аппаратное ускорение
-                // Теперь для мощных устройств включаем аппаратное ускорение, для слабых оставляем программное
                 if (!lowEndMode) {
                     setLayerType(LAYER_TYPE_HARDWARE, null);
                 } else {
@@ -343,16 +368,22 @@ public class LenterIME extends InputMethodService {
             for (int i = 0; i < TOTAL_LAYOUTS; i++) {
                 layouts[i] = new LayoutData();
                 layouts[i].keyCoords = new float[60 * 4];
-                layouts[i].labels = new String[60];
-                layouts[i].values = new String[60];
-                layouts[i].types = new int[60];
-                layouts[i].normalIdx = new int[60];
-                layouts[i].shiftIdx = new int[60];
-                Arrays.fill(layouts[i].normalIdx, -1);
-                Arrays.fill(layouts[i].shiftIdx, -1);
+                layouts[i].labels = new char[60][];
+                layouts[i].labelsLen = new int[60];
+                layouts[i].values = new char[60][];
+                layouts[i].valuesLen = new int[60];
+                layouts[i].types = new byte[60];
+                layouts[i].normalIdx = new byte[60];
+                layouts[i].shiftIdx = new byte[60];
+                Arrays.fill(layouts[i].normalIdx, (byte) -1);
+                Arrays.fill(layouts[i].shiftIdx, (byte) -1);
             }
 
             ensureGlobalAtlas();
+        }
+
+        public void setIsPreviewMode(boolean preview) {
+            this.isPreviewMode = preview;
         }
 
         public void setImeService(LenterIME s) {
@@ -393,13 +424,14 @@ public class LenterIME extends InputMethodService {
             invalidate();
         }
 
-        public void setEnterIcon(String icon) {
-            if (!currentEnterIcon.equals(icon)) {
+        public void setEnterIcon(char[] icon) {
+            if (!Arrays.equals(currentEnterIcon, icon)) {
                 currentEnterIcon = icon;
                 if (curLayout != null) {
                     for (int i = 0; i < curLayout.count; i++) {
                         if (curLayout.types[i] == T_ENTER) {
-                            curLayout.labels[i] = currentEnterIcon;
+                            curLayout.labels[i] = icon;
+                            curLayout.labelsLen[i] = icon.length;
                             break;
                         }
                     }
@@ -409,25 +441,46 @@ public class LenterIME extends InputMethodService {
             }
         }
 
+        public void setEnterIcon(String icon) {
+            setEnterIcon(icon.toCharArray());
+        }
+
+        public void setOffsets(int left, int right, int top, int bottom) {
+            offsetLeft = left;
+            offsetRight = right;
+            offsetTop = top;
+            offsetBottom = bottom;
+
+            int viewW = getWidth();
+            int viewH = getHeight();
+            float contentW = screenW;
+            float contentH = previewHeight + keyH * 4;
+
+            float availableW = viewW - offsetLeft - offsetRight;
+            float availableH = viewH - offsetTop - offsetBottom;
+
+            if (availableW > 0 && availableH > 0) {
+                float scaleX = availableW / contentW;
+                float scaleY = availableH / contentH;
+                scale = Math.min(scaleX, scaleY);
+                translateX = offsetLeft + (availableW - contentW * scale) / 2f;
+                translateY = offsetTop + (availableH - contentH * scale) / 2f;
+            } else {
+                scale = 1f;
+                translateX = 0;
+                translateY = 0;
+            }
+
+            needRedrawBg = true;
+            invalidate();
+        }
+
         private void ensureLayoutBuilt(int lang) {
             if (!layouts[lang].isBuilt) {
                 buildLayout(lang);
             }
         }
 
-        /* старый код gen(String type) был заменён на buildLayout(int langIdx) для кэширования раскладок
-        private void gen(String type) {
-            int langIdx;
-            if (type.equals("ru")) langIdx = LANG_RU;
-            else if (type.equals("en")) langIdx = LANG_EN;
-            else if (type.equals("sym")) langIdx = LANG_SYM;
-            else langIdx = LANG_EXTRA;
-            // ... старый код построения ...
-        }
-        */
-
-        // todo: КЭШИРОВАНИЕ РАСКЛАДОК - раньше каждая смена языка вызывала полную перестройку gen()
-        // Теперь все 6 раскладок (RU, EN, SYM, EXTRA, NUMERIC, DECIMAL) строятся один раз и переиспользуются
         private void buildLayout(int langIdx) {
             LayoutData d = layouts[langIdx];
             d.count = 0;
@@ -440,9 +493,9 @@ public class LenterIME extends InputMethodService {
                 y += keyH;
                 row(d, y, w, "фывапролджэ");
                 y += keyH;
-                k(d, SHIFT_NORMAL, "SH", T_SHIFT, 0, y, w * 1.5f);
+                k(d, SHIFT_NORMAL, "SH".toCharArray(), T_SHIFT, 0, y, w * 1.5f);
                 rowW(d, y, w * 1.5f, (screenW - w * 3f) / 9f, "ячсмитьбю");
-                k(d, "⌫", "DEL", T_DEL, screenW - w * 1.5f, y, w * 1.5f);
+                k(d, "⌫".toCharArray(), "DEL".toCharArray(), T_DEL, screenW - w * 1.5f, y, w * 1.5f);
                 y += keyH;
                 drawBottom(d, y);
             } else if (langIdx == LANG_EN) {
@@ -451,9 +504,9 @@ public class LenterIME extends InputMethodService {
                 y += keyH;
                 rowW(d, y, w * 0.5f, w, "asdfghjkl");
                 y += keyH;
-                k(d, SHIFT_NORMAL, "SH", T_SHIFT, 0, y, w * 1.5f);
+                k(d, SHIFT_NORMAL, "SH".toCharArray(), T_SHIFT, 0, y, w * 1.5f);
                 rowW(d, y, w * 1.5f, w, "zxcvbnm");
-                k(d, "⌫", "DEL", T_DEL, screenW - w * 1.5f, y, w * 1.5f);
+                k(d, "⌫".toCharArray(), "DEL".toCharArray(), T_DEL, screenW - w * 1.5f, y, w * 1.5f);
                 y += keyH;
                 drawBottom(d, y);
             } else if (langIdx == LANG_SYM) {
@@ -462,9 +515,9 @@ public class LenterIME extends InputMethodService {
                 y += keyH;
                 row(d, y, w, "@#№_&-+()/");
                 y += keyH;
-                k(d, "=\\<", "EX", T_SYM_EX, 0, y, w * 1.5f);
+                k(d, "=\\<".toCharArray(), "EX".toCharArray(), T_SYM_EX, 0, y, w * 1.5f);
                 rowW(d, y, w * 1.5f, w, "*\"':;!?");
-                k(d, "⌫", "DEL", T_DEL, screenW - w * 1.5f, y, w * 1.5f);
+                k(d, "⌫".toCharArray(), "DEL".toCharArray(), T_DEL, screenW - w * 1.5f, y, w * 1.5f);
                 y += keyH;
                 drawBottom(d, y);
             } else if (langIdx == LANG_EXTRA) {
@@ -473,16 +526,12 @@ public class LenterIME extends InputMethodService {
                 y += keyH;
                 row(d, y, w, "€$£¥₸₽^°={}");
                 y += keyH;
-                k(d, "?12", "SYM", T_SYM, 0, y, w * 1.5f);
+                k(d, "?12".toCharArray(), "SYM".toCharArray(), T_SYM, 0, y, w * 1.5f);
                 rowW(d, y, w * 1.5f, w, "\\©®™%[]■");
-                k(d, "⌫", "DEL", T_DEL, screenW - w * 1.5f, y, w * 1.5f);
+                k(d, "⌫".toCharArray(), "DEL".toCharArray(), T_DEL, screenW - w * 1.5f, y, w * 1.5f);
                 y += keyH;
                 drawBottom(d, y);
             } else if (langIdx == LANG_NUMERIC) {
-                // todo: В РАЗРАБОТКЕ, БУДУТ ИЗМЕНЕНИЯ
-                // Цифровая раскладка (4x5): 1 2 3 ( / 4 5 6 ) / 7 8 9 ABC / . 0 + ⌫ ↵
-                // Ранее в символьных раскладках была кнопка RU/EN, которая вызывала путаницу при переключении языка.
-                // Теперь кнопка языка полностью убрана из символьных и цифровой раскладок.
                 float keyW = screenW / 4f;
                 y = 0;
                 rowNumeric(d, y, keyW, "123(");
@@ -490,27 +539,26 @@ public class LenterIME extends InputMethodService {
                 rowNumeric(d, y, keyW, "456)");
                 y += keyH;
                 float x = 0;
-                k(d, "7", "7", T_CHAR, x, y, keyW);
+                k(d, "7".toCharArray(), "7".toCharArray(), T_CHAR, x, y, keyW);
                 x += keyW;
-                k(d, "8", "8", T_CHAR, x, y, keyW);
+                k(d, "8".toCharArray(), "8".toCharArray(), T_CHAR, x, y, keyW);
                 x += keyW;
-                k(d, "9", "9", T_CHAR, x, y, keyW);
+                k(d, "9".toCharArray(), "9".toCharArray(), T_CHAR, x, y, keyW);
                 x += keyW;
-                k(d, "ABC", "ABC", T_ABC, x, y, keyW);
+                k(d, "ABC".toCharArray(), "ABC".toCharArray(), T_ABC, x, y, keyW);
                 y += keyH;
                 float keyW5 = screenW / 5f;
                 x = 0;
-                k(d, ".", ".", T_CHAR, x, y, keyW5);
+                k(d, ".".toCharArray(), ".".toCharArray(), T_CHAR, x, y, keyW5);
                 x += keyW5;
-                k(d, "0", "0", T_CHAR, x, y, keyW5);
+                k(d, "0".toCharArray(), "0".toCharArray(), T_CHAR, x, y, keyW5);
                 x += keyW5;
-                k(d, "+", "+", T_CHAR, x, y, keyW5);
+                k(d, "+".toCharArray(), "+".toCharArray(), T_CHAR, x, y, keyW5);
                 x += keyW5;
-                k(d, "⌫", "DEL", T_DEL, x, y, keyW5);
+                k(d, "⌫".toCharArray(), "DEL".toCharArray(), T_DEL, x, y, keyW5);
                 x += keyW5;
-                k(d, currentEnterIcon, "\n", T_ENTER, x, y, keyW5);
+                k(d, currentEnterIcon, "\n".toCharArray(), T_ENTER, x, y, keyW5);
             } else if (langIdx == LANG_DECIMAL) {
-                // зарезервировано для будущего
             }
 
             buildAtlas(d);
@@ -518,9 +566,6 @@ public class LenterIME extends InputMethodService {
             d.isBuilt = true;
         }
 
-        // todo: ИСПРАВЛЕНО ОТОБРАЖЕНИЕ НИЖНЕГО РЯДА - из символьных раскладок (?12 и =\<) полностью убрана кнопка переключения языка RU/EN
-        // Раньше эта кнопка отображалась и при нажатии сбивала пользователя с толку, переключая язык и выходя из символьной раскладки.
-        // Теперь кнопка языка присутствует только в основных раскладках (RU/EN)
         private void drawBottom(LayoutData d, float y) {
             float wSymWeight = 1.5f;
             float wCommaWeight = 1.2f;
@@ -534,10 +579,10 @@ public class LenterIME extends InputMethodService {
             boolean isSymbolLayout = (curLang == LANG_SYM || curLang == LANG_EXTRA);
             float totalWeight;
             if (isSymbolLayout) {
-                totalWeight = wSymWeight + wCommaWeight + wExtraWeight + wSpaceWeight + 
+                totalWeight = wSymWeight + wCommaWeight + wExtraWeight + wSpaceWeight +
                              wExtraRightWeight + wDotWeight + wEnterWeight;
             } else {
-                totalWeight = wSymWeight + wCommaWeight + wLangWeight + wExtraWeight + 
+                totalWeight = wSymWeight + wCommaWeight + wLangWeight + wExtraWeight +
                              wSpaceWeight + wExtraRightWeight + wDotWeight + wEnterWeight;
             }
 
@@ -545,50 +590,50 @@ public class LenterIME extends InputMethodService {
             float x = 0;
 
             float w = wSymWeight * unit;
-            String label = (curLang == LANG_RU || curLang == LANG_EN) ? "?12" : "ABC";
+            char[] label = (curLang == LANG_RU || curLang == LANG_EN) ? "?12".toCharArray() : "ABC".toCharArray();
             int type = (curLang == LANG_RU || curLang == LANG_EN) ? T_SYM : T_ABC;
-            k(d, label, "SYM_TOGGLE", type, x, y, w);
+            k(d, label, "SYM_TOGGLE".toCharArray(), type, x, y, w);
             x += w;
 
             w = wCommaWeight * unit;
-            String comma = (curLang == LANG_EXTRA) ? "<" : ",";
+            char[] comma = (curLang == LANG_EXTRA) ? "<".toCharArray() : ",".toCharArray();
             k(d, comma, comma, T_CHAR, x, y, w);
             x += w;
 
-            // кнопка языка только для основных раскладок
             if (!isSymbolLayout) {
                 w = wLangWeight * unit;
-                k(d, (lastLang == LANG_RU) ? "RU" : "EN", "L", T_LANG, x, y, w);
+                char[] langLabel = (lastLang == LANG_RU) ? "RU".toCharArray() : "EN".toCharArray();
+                k(d, langLabel, "L".toCharArray(), T_LANG, x, y, w);
                 x += w;
             }
 
             if (curLang == LANG_RU) {
                 w = wExtraWeight * unit;
-                k(d, "ё", "ё", T_CHAR, x, y, w);
+                k(d, "ё".toCharArray(), "ё".toCharArray(), T_CHAR, x, y, w);
                 x += w;
             }
 
             w = wSpaceWeight * unit;
-            k(d, " ", " ", T_SPACE, x, y, w);
+            k(d, " ".toCharArray(), " ".toCharArray(), T_SPACE, x, y, w);
             x += w;
-            
+
             if (curLang == LANG_RU) {
                 w = wExtraRightWeight * unit;
-                k(d, "ъ", "ъ", T_CHAR, x, y, w);
+                k(d, "ъ".toCharArray(), "ъ".toCharArray(), T_CHAR, x, y, w);
                 x += w;
             }
 
             w = wDotWeight * unit;
-            String dot = (curLang == LANG_EXTRA) ? ">" : ".";
+            char[] dot = (curLang == LANG_EXTRA) ? ">".toCharArray() : ".".toCharArray();
             k(d, dot, dot, T_CHAR, x, y, w);
             x += w;
 
             float enterWidth = screenW - x;
             if (enterWidth < 0) enterWidth = 0;
-            k(d, currentEnterIcon, "\n", T_ENTER, x, y, enterWidth);
+            k(d, currentEnterIcon, "\n".toCharArray(), T_ENTER, x, y, enterWidth);
         }
 
-        private void k(LayoutData d, String l, String v, int t, float x, float y, float w) {
+        private void k(LayoutData d, char[] l, char[] v, int t, float x, float y, float w) {
             int base = d.count * 4;
             d.keyCoords[base] = x;
             d.keyCoords[base + 1] = y;
@@ -596,11 +641,13 @@ public class LenterIME extends InputMethodService {
             d.keyCoords[base + 3] = y + keyH;
 
             d.labels[d.count] = l;
+            d.labelsLen[d.count] = l.length;
             d.values[d.count] = v;
-            d.types[d.count] = t;
+            d.valuesLen[d.count] = v.length;
+            d.types[d.count] = (byte) t;
 
             int r = (int) (y / keyH);
-            if (r >= 0 && r < 4) d.grid[r][d.gridCount[r]++] = d.count;
+            if (r >= 0 && r < 4) d.grid[r][d.gridCount[r]++] = (byte) d.count;
             d.count++;
         }
 
@@ -608,7 +655,7 @@ public class LenterIME extends InputMethodService {
             int len = c.length();
             for (int i = 0; i < len; i++) {
                 char ch = c.charAt(i);
-                k(d, String.valueOf(ch), String.valueOf(ch), T_CHAR, i * w, y, w);
+                k(d, new char[]{ch}, new char[]{ch}, T_CHAR, i * w, y, w);
             }
         }
 
@@ -616,7 +663,7 @@ public class LenterIME extends InputMethodService {
             int len = c.length();
             for (int i = 0; i < len; i++) {
                 char ch = c.charAt(i);
-                k(d, String.valueOf(ch), String.valueOf(ch), T_CHAR, sx + i * w, y, w);
+                k(d, new char[]{ch}, new char[]{ch}, T_CHAR, sx + i * w, y, w);
             }
         }
 
@@ -624,13 +671,10 @@ public class LenterIME extends InputMethodService {
             int len = c.length();
             for (int i = 0; i < len; i++) {
                 char ch = c.charAt(i);
-                k(d, String.valueOf(ch), String.valueOf(ch), T_CHAR, i * w, y, w);
+                k(d, new char[]{ch}, new char[]{ch}, T_CHAR, i * w, y, w);
             }
         }
 
-        // todo: ГЛОБАЛЬНЫЙ АТЛАС - раньше был отдельный атлас для каждой раскладки, теперь один на все символы
-        // Исправлена проблема с наложением символов (квадрат ■ отображался с лишней вертикальной чертой)
-        // Теперь ширина ячейки вычисляется по максимальной ширине символа + отступ 4px
         private void ensureGlobalAtlas() {
             if (sGlobalAtlasBuilt) return;
 
@@ -701,70 +745,17 @@ public class LenterIME extends InputMethodService {
             sGlobalAtlasBuilt = true;
         }
 
-        /* старый код buildAtlas с отдельным атласом для каждой раскладки (закомментирован)
-        private void buildAtlas(LayoutData d) {
-            Set<Character> chars = new HashSet<>();
-            for (int i = 0; i < d.count; i++) {
-                if (d.types[i] == T_CHAR) {
-                    char c = d.labels[i].charAt(0);
-                    chars.add(c);
-                    if (Character.isLetter(c)) {
-                        chars.add(Character.toUpperCase(c));
-                    }
-                }
-            }
-            List<Character> list = new ArrayList<>(chars);
-            Collections.sort(list, new Comparator<Character>() {
-                public int compare(Character a, Character b) {
-                    return a.compareTo(b);
-                }
-            });
-
-            d.atlasCellW = (int) pText.measureText("W") + 4;
-            d.atlasCellH = (int) (pText.getFontSpacing() + 2);
-            d.atlasCols = list.size();
-            int atlasWidth = d.atlasCols * d.atlasCellW;
-            int atlasHeight = d.atlasCellH;
-
-            if (d.atlas == null || d.atlas.getWidth() != atlasWidth || d.atlas.getHeight() != atlasHeight) {
-                if (d.atlas != null) d.atlas.recycle();
-                d.atlas = Bitmap.createBitmap(atlasWidth, atlasHeight, Bitmap.Config.ALPHA_8);
-                Canvas c = new Canvas(d.atlas);
-                Paint paint = new Paint(pText);
-                paint.setColor(Color.WHITE);
-                for (int i = 0; i < list.size(); i++) {
-                    char ch = list.get(i);
-                    float x = i * d.atlasCellW + d.atlasCellW / 2f;
-                    float y = (d.atlasCellH - pText.descent() - pText.ascent()) / 2f;
-                    c.drawText(String.valueOf(ch), x, y, paint);
-                }
-            }
-
-            for (int i = 0; i < d.count; i++) {
-                if (d.types[i] == T_CHAR) {
-                    char c = d.labels[i].charAt(0);
-                    char cu = Character.toUpperCase(c);
-                    d.normalIdx[i] = list.indexOf(c);
-                    d.shiftIdx[i] = list.indexOf(cu);
-                } else {
-                    d.normalIdx[i] = -1;
-                    d.shiftIdx[i] = -1;
-                }
-            }
-        }
-        */
-
         private void buildAtlas(LayoutData d) {
             ensureGlobalAtlas();
             for (int i = 0; i < d.count; i++) {
                 if (d.types[i] == T_CHAR) {
-                    char c = d.labels[i].charAt(0);
+                    char c = d.labels[i][0];
                     char cu = Character.toUpperCase(c);
                     if (c < sCharToAtlasIndex.length) {
-                        d.normalIdx[i] = sCharToAtlasIndex[c];
+                        d.normalIdx[i] = (byte) sCharToAtlasIndex[c];
                     }
                     if (cu < sCharToAtlasIndex.length) {
-                        d.shiftIdx[i] = sCharToAtlasIndex[cu];
+                        d.shiftIdx[i] = (byte) sCharToAtlasIndex[cu];
                     }
                 }
             }
@@ -772,7 +763,6 @@ public class LenterIME extends InputMethodService {
 
         private static final int HITMAP_SCALE = 4;
 
-        // todo: ХИТМАП - раньше использовался short[] (2 байта на ячейку), теперь byte[] (1 байт), что снизило потребление памяти на 50%
         private void buildHitmap(LayoutData d) {
             d.hitmapW = screenW / HITMAP_SCALE + 1;
             d.hitmapH = (int) (keyH * 4) / HITMAP_SCALE + 1;
@@ -812,33 +802,51 @@ public class LenterIME extends InputMethodService {
             }
             ensureLayoutBuilt(curLang);
             curLayout = layouts[curLang];
-            needRedrawBg = true;
+            setOffsets(offsetLeft, offsetRight, offsetTop, offsetBottom);
         }
 
         @Override
         protected void onDraw(Canvas canvas) {
-            int w = getWidth();
-            int h = getHeight();
+            canvas.drawColor(BG);
+
+            canvas.save();
+            canvas.translate(translateX, translateY);
+            canvas.scale(scale, scale);
 
             if (lowEndMode) {
                 drawStatic(canvas);
                 drawPressedKeys(canvas);
-                return;
-            }
-
-            if (needRedrawBg || bgBitmap == null || prevWidth != w || prevHeight != h) {
-                if (bgBitmap == null || prevWidth != w || prevHeight != h) {
-                    bgBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.RGB_565);
-                    bgCanvas = new Canvas(bgBitmap);
-                    prevWidth = w;
-                    prevHeight = h;
+            } else {
+                if (needRedrawBg || bgBitmap == null || prevWidth != getWidth() || prevHeight != getHeight()) {
+                    if (bgBitmap == null || prevWidth != getWidth() || prevHeight != getHeight()) {
+                        bgBitmap = Bitmap.createBitmap(getWidth(), getHeight(), Bitmap.Config.RGB_565);
+                        bgCanvas = new Canvas(bgBitmap);
+                        prevWidth = getWidth();
+                        prevHeight = getHeight();
+                    }
+                    bgCanvas.drawColor(BG);
+                    drawStatic(bgCanvas);
+                    needRedrawBg = false;
                 }
-                drawStatic(bgCanvas);
-                needRedrawBg = false;
+                canvas.drawBitmap(bgBitmap, 0, 0, null);
+                drawPressedKeys(canvas);
             }
 
-            canvas.drawBitmap(bgBitmap, 0, 0, null);
-            drawPressedKeys(canvas);
+            canvas.restore();
+
+            if (isPreviewMode) {
+                Paint borderPaint = new Paint();
+                borderPaint.setStyle(Paint.Style.STROKE);
+                borderPaint.setStrokeWidth(2 * density);
+                borderPaint.setColor(0xFF00FF00);
+                canvas.drawRect(0, 0, getWidth(), getHeight(), borderPaint);
+                borderPaint.setColor(0xFFFFA500);
+                float left = translateX;
+                float top = translateY;
+                float right = translateX + screenW * scale;
+                float bottom = translateY + (previewHeight + keyH * 4) * scale;
+                canvas.drawRect(left, top, right, bottom, borderPaint);
+            }
         }
 
         private void drawPressedKeys(Canvas canvas) {
@@ -858,7 +866,7 @@ public class LenterIME extends InputMethodService {
                 tempRect.set((int) l, (int) t, (int) r, (int) b);
                 canvas.drawRect(tempRect, pH);
 
-                if (d.types[key] == T_CHAR && !d.values[key].equals(" ") && previewHeight > 0) {
+                if (d.types[key] == T_CHAR && !(d.valuesLen[key] == 1 && d.values[key][0] == ' ') && previewHeight > 0) {
                     float cx = (l + r) / 2;
                     float pT = t - previewHeight;
                     float pB = t;
@@ -877,7 +885,7 @@ public class LenterIME extends InputMethodService {
                         tempDstRectF.set(cx - halfW, cyPreview - halfH, cx + halfW, cyPreview + halfH);
                         canvas.drawBitmap(sGlobalAtlas, tempSrcRect, tempDstRectF, pAtlas);
                     } else {
-                        char ch = d.labels[key].charAt(0);
+                        char ch = d.labels[key][0];
                         if (shift > 0) ch = Character.toUpperCase(ch);
                         tmpChar[0] = ch;
                         canvas.drawText(tmpChar, 0, 1, cx,
@@ -888,8 +896,6 @@ public class LenterIME extends InputMethodService {
         }
 
         private void drawStatic(Canvas cv) {
-            cv.drawColor(BG);
-
             LayoutData d = curLayout;
             if (d == null) return;
 
@@ -928,19 +934,19 @@ public class LenterIME extends InputMethodService {
                         tempDstRectF.set(cx - halfW, cy - halfH, cx + halfW, cy + halfH);
                         cv.drawBitmap(sGlobalAtlas, tempSrcRect, tempDstRectF, pAtlas);
                     } else {
-                        char ch = d.labels[i].charAt(0);
+                        char ch = d.labels[i][0];
                         if (shift > 0) ch = Character.toUpperCase(ch);
                         tmpChar[0] = ch;
                         cv.drawText(tmpChar, 0, 1, cx, cy - textBaselineOffset, pText);
                     }
                 } else if (d.types[i] == T_SHIFT) {
-                    String shiftLabel;
+                    char[] shiftLabel;
                     if (shift == 1) shiftLabel = SHIFT_SINGLE;
                     else if (shift == 2) shiftLabel = SHIFT_LOCK;
                     else shiftLabel = SHIFT_NORMAL;
-                    cv.drawText(shiftLabel, cx, cy - textBaselineOffset, pText);
+                    cv.drawText(shiftLabel, 0, shiftLabel.length, cx, cy - textBaselineOffset, pText);
                 } else {
-                    cv.drawText(d.labels[i], cx, cy - textBaselineOffset, pText);
+                    cv.drawText(d.labels[i], 0, d.labelsLen[i], cx, cy - textBaselineOffset, pText);
                 }
             }
         }
@@ -958,6 +964,11 @@ public class LenterIME extends InputMethodService {
             float top = d.keyCoords[base + 1];
             float right = d.keyCoords[base + 2];
             float bottom = d.keyCoords[base + 3] + previewHeight;
+
+            left = left * scale + translateX;
+            top = top * scale + translateY;
+            right = right * scale + translateX;
+            bottom = bottom * scale + translateY;
 
             outRect.left = (int) Math.floor(left);
             outRect.top = (int) Math.floor(top);
@@ -988,8 +999,13 @@ public class LenterIME extends InputMethodService {
             LayoutData d = curLayout;
             if (d == null) return true;
 
+            float rawX = e.getX(index);
+            float rawY = e.getY(index);
+            float x = (rawX - translateX) / scale;
+            float y = (rawY - translateY) / scale;
+
             if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
-                int k = getK(d, e.getX(index), e.getY(index) - previewHeight);
+                int k = getK(d, x, y - previewHeight);
                 if (k != -1) {
                     performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP);
                     int slot = findEmptyPointerSlot();
@@ -997,7 +1013,7 @@ public class LenterIME extends InputMethodService {
                         pointerIds[slot] = id;
                         pointerKeys[slot] = k;
                     }
-                    if (d.types[k] == T_DEL) {
+                    if (!isPreviewMode && d.types[k] == T_DEL) {
                         if (ime.deleteSelected()) {
                             isDel = false;
                             h.removeCallbacks(delRunnable);
@@ -1018,7 +1034,9 @@ public class LenterIME extends InputMethodService {
 
                 for (int m = 0; m < e.getPointerCount(); m++) {
                     int pid = e.getPointerId(m);
-                    int nk = getK(d, e.getX(m), e.getY(m) - previewHeight);
+                    float px = (e.getX(m) - translateX) / scale;
+                    float py = (e.getY(m) - translateY) / scale;
+                    int nk = getK(d, px, py - previewHeight);
                     int slot = findPointerSlot(pid);
                     if (slot >= 0) {
                         int oldK = pointerKeys[slot];
@@ -1054,12 +1072,12 @@ public class LenterIME extends InputMethodService {
                 if (slot >= 0) {
                     int k = pointerKeys[slot];
                     if (k != -1) {
-                        if (d.types[k] != T_DEL) {
+                        if (!isPreviewMode && d.types[k] != T_DEL) {
                             handle(k);
                         }
                         pointerKeys[slot] = -1;
                         pointerIds[slot] = -1;
-                        if (d.types[k] == T_DEL) {
+                        if (!isPreviewMode && d.types[k] == T_DEL) {
                             isDel = false;
                             h.removeCallbacks(delRunnable);
                         }
@@ -1087,29 +1105,22 @@ public class LenterIME extends InputMethodService {
             return true;
         }
 
-        /* старый код handle с проблемой переключения языка в символьных раскладках (закомментирован)
         private void handle(int i) {
             LayoutData d = curLayout;
             int t = d.types[i];
-            String v = d.values[i];
-            // ... старый код где при нажатии на T_LANG в символьной раскладке происходил выход из неё ...
-        }
-        */
-
-        private void handle(int i) {
-            LayoutData d = curLayout;
-            int t = d.types[i];
-            String v = d.values[i];
+            char[] v = d.values[i];
+            int vLen = d.valuesLen[i];
 
             if (t == T_CHAR) {
+                String sv = new String(v, 0, vLen);
                 if (shift > 0) {
-                    v = v.toUpperCase(Locale.ROOT);
+                    sv = sv.toUpperCase(Locale.ROOT);
                     if (shift == 1) {
                         shift = 0;
                         needRedrawBg = true;
                     }
                 }
-                ime.commitText(v);
+                ime.commitText(sv);
             } else if (t == T_SHIFT) {
                 shift = (shift + 1) % 3;
                 needRedrawBg = true;
@@ -1119,11 +1130,21 @@ public class LenterIME extends InputMethodService {
             } else if (t == T_ENTER) {
                 ime.handleEnter();
             } else if (t == T_LANG) {
-                lastLang = (lastLang == LANG_RU) ? LANG_EN : LANG_RU;
-                ime.saveLanguage(lastLang == LANG_RU ? "ru" : "en");
-                setLanguage(lastLang == LANG_RU ? "ru" : "en");
-                needRedrawBg = true;
-                invalidate();
+                if (isPreviewMode) {
+                    lastLang = (lastLang == LANG_RU) ? LANG_EN : LANG_RU;
+                    curLang = lastLang;
+                    ensureLayoutBuilt(curLang);
+                    curLayout = layouts[curLang];
+                    setEnterIcon(currentEnterIcon);
+                    needRedrawBg = true;
+                    invalidate();
+                } else {
+                    lastLang = (lastLang == LANG_RU) ? LANG_EN : LANG_RU;
+                    ime.saveLanguage(lastLang == LANG_RU ? "ru" : "en");
+                    setLanguage(lastLang == LANG_RU ? "ru" : "en");
+                    needRedrawBg = true;
+                    invalidate();
+                }
             } else if (t == T_SYM) {
                 if (curLang == LANG_RU || curLang == LANG_EN) {
                     curLang = LANG_SYM;
