@@ -42,12 +42,25 @@ import android.widget.LinearLayout;
 
 import java.util.*;
 
-// todo: разработка новой функции: разбитый экран
+// todo: оптимизация для API 10 (определены недостающие константы, убраны вызовы API 11+, заменён Typeface)
 
 public class LenterIME extends InputMethodService {
     private KeyboardView keyboardView;
     private int currentEnterAction = EditorInfo.IME_ACTION_UNSPECIFIED;
     private EditorInfo currentEditorInfo;
+
+    private static final int IME_FLAG_NO_ENTER_ACTION = 0x40000000;
+    private static final int IME_ACTION_SEARCH = 3;
+    private static final int IME_ACTION_SEND = 4;
+    private static final int IME_ACTION_NEXT = 5;
+    private static final int IME_ACTION_DONE = 6;
+    private static final int IME_ACTION_GO = 2;
+    private static final int IME_ACTION_PREVIOUS = 7;
+    private static final int TYPE_MASK_CLASS = 0xF;
+    private static final int TYPE_CLASS_NUMBER = 0x2;
+    private static final int TYPE_CLASS_PHONE = 0x3;
+    private static final int TYPE_NUMBER_FLAG_DECIMAL = 0x2000;
+    private static final int TYPE_TEXT_FLAG_MULTI_LINE = 0x20000;
 
     private static int sOffsetLeft = 0;
     private static int sOffsetRight = 0;
@@ -110,17 +123,17 @@ public class LenterIME extends InputMethodService {
 
     public boolean isNumericInput() {
         if (currentEditorInfo == null) return false;
-        int inputClass = currentEditorInfo.inputType & EditorInfo.TYPE_MASK_CLASS;
-        return inputClass == EditorInfo.TYPE_CLASS_NUMBER ||
-               inputClass == EditorInfo.TYPE_CLASS_PHONE;
+        int inputClass = currentEditorInfo.inputType & TYPE_MASK_CLASS;
+        return inputClass == TYPE_CLASS_NUMBER ||
+               inputClass == TYPE_CLASS_PHONE;
     }
 
     public boolean isDecimalInput() {
         if (currentEditorInfo == null) return false;
-        int inputClass = currentEditorInfo.inputType & EditorInfo.TYPE_MASK_CLASS;
-        if (inputClass == EditorInfo.TYPE_CLASS_PHONE) return true;
-        if (inputClass == EditorInfo.TYPE_CLASS_NUMBER) {
-            return (currentEditorInfo.inputType & EditorInfo.TYPE_NUMBER_FLAG_DECIMAL) != 0;
+        int inputClass = currentEditorInfo.inputType & TYPE_MASK_CLASS;
+        if (inputClass == TYPE_CLASS_PHONE) return true;
+        if (inputClass == TYPE_CLASS_NUMBER) {
+            return (currentEditorInfo.inputType & TYPE_NUMBER_FLAG_DECIMAL) != 0;
         }
         return false;
     }
@@ -128,17 +141,17 @@ public class LenterIME extends InputMethodService {
     public String getEnterIcon() {
         if (currentEditorInfo == null) return "↵";
         int imeOptions = currentEditorInfo.imeOptions;
-        if ((imeOptions & EditorInfo.IME_FLAG_NO_ENTER_ACTION) != 0) {
+        if (Build.VERSION.SDK_INT >= 11 && (imeOptions & IME_FLAG_NO_ENTER_ACTION) != 0) {
             return "↵";
         }
         int action = imeOptions & EditorInfo.IME_MASK_ACTION;
         switch (action) {
-            case EditorInfo.IME_ACTION_SEARCH: return "⌕";
-            case EditorInfo.IME_ACTION_SEND:   return "➤";
-            case EditorInfo.IME_ACTION_NEXT:    return "→";
-            case EditorInfo.IME_ACTION_DONE:    return "✓";
-            case EditorInfo.IME_ACTION_GO:      return "➤";
-            case EditorInfo.IME_ACTION_PREVIOUS:return "←";
+            case IME_ACTION_SEARCH: return "⌕";
+            case IME_ACTION_SEND:   return "➤";
+            case IME_ACTION_NEXT:    return "→";
+            case IME_ACTION_DONE:    return "✓";
+            case IME_ACTION_GO:      return "➤";
+            case IME_ACTION_PREVIOUS:return "←";
             default: return "↵";
         }
     }
@@ -156,19 +169,23 @@ public class LenterIME extends InputMethodService {
         InputConnection ic = getCurrentInputConnection();
         if (ic == null || currentEditorInfo == null) return;
 
-        boolean shouldInsertNewline = (currentEditorInfo.imeOptions & EditorInfo.IME_FLAG_NO_ENTER_ACTION) != 0;
-        if (shouldInsertNewline) {
+        boolean isMultiLine = (currentEditorInfo.inputType & TYPE_TEXT_FLAG_MULTI_LINE) != 0;
+        boolean noEnterAction = false;
+        if (Build.VERSION.SDK_INT >= 11) {
+            noEnterAction = (currentEditorInfo.imeOptions & IME_FLAG_NO_ENTER_ACTION) != 0;
+        }
+        if (isMultiLine || noEnterAction) {
             ic.commitText("\n", 1);
             return;
         }
 
         switch (currentEnterAction) {
-            case EditorInfo.IME_ACTION_SEARCH:
-            case EditorInfo.IME_ACTION_GO:
-            case EditorInfo.IME_ACTION_SEND:
-            case EditorInfo.IME_ACTION_NEXT:
-            case EditorInfo.IME_ACTION_DONE:
-            case EditorInfo.IME_ACTION_PREVIOUS:
+            case IME_ACTION_SEARCH:
+            case IME_ACTION_GO:
+            case IME_ACTION_SEND:
+            case IME_ACTION_NEXT:
+            case IME_ACTION_DONE:
+            case IME_ACTION_PREVIOUS:
                 ic.performEditorAction(currentEnterAction);
                 break;
             default:
@@ -222,6 +239,38 @@ public class LenterIME extends InputMethodService {
         private static final char[] SHIFT_SINGLE = "⬆".toCharArray();
         private static final char[] SHIFT_LOCK = "⟰".toCharArray();
 
+        private static final char[] ROW_RU1 = "йцукенгшщзх".toCharArray();
+        private static final char[] ROW_RU2 = "фывапролджэ".toCharArray();
+        private static final char[] ROW_RU3 = "ячсмитьбю".toCharArray();
+        private static final char[] ROW_EN1 = "qwertyuiop".toCharArray();
+        private static final char[] ROW_EN2 = "asdfghjkl".toCharArray();
+        private static final char[] ROW_EN3 = "zxcvbnm".toCharArray();
+        private static final char[] ROW_SYM1 = "1234567890".toCharArray();
+        private static final char[] ROW_SYM2 = "@#№_&-+()/".toCharArray();
+        private static final char[] ROW_SYM3 = "*\"':;!?".toCharArray();
+        private static final char[] ROW_EXTRA1 = "~`|•√π÷×¶∆●".toCharArray();
+        private static final char[] ROW_EXTRA2 = "€$£¥₸₽^°={}".toCharArray();
+        private static final char[] ROW_EXTRA3 = "\\©®™%[]■".toCharArray();
+
+        private static final char[] LABEL_SYM = "?12".toCharArray();
+        private static final char[] LABEL_ABC = "ABC".toCharArray();
+        private static final char[] LABEL_RU = "RU".toCharArray();
+        private static final char[] LABEL_EN = "EN".toCharArray();
+        private static final char[] LABEL_COMMA = ",".toCharArray();
+        private static final char[] LABEL_LT = "<".toCharArray();
+        private static final char[] LABEL_DOT = ".".toCharArray();
+        private static final char[] LABEL_GT = ">".toCharArray();
+        private static final char[] LABEL_YO = "ё".toCharArray();
+        private static final char[] LABEL_HARD = "ъ".toCharArray();
+        private static final char[] LABEL_SPACE = " ".toCharArray();
+        private static final char[] LABEL_DEL = "⌫".toCharArray();
+        private static final char[] LABEL_DEL_VAL = "DEL".toCharArray();
+        private static final char[] LABEL_ENTER = "\n".toCharArray();
+        private static final char[] LABEL_SH = "SH".toCharArray();
+        private static final char[] LABEL_EX = "EX".toCharArray();
+        private static final char[] LABEL_SYM_TOGGLE = "SYM_TOGGLE".toCharArray();
+        private static final char[] LABEL_L = "L".toCharArray();
+
         private final Paint p1 = new Paint();
         private final Paint p2 = new Paint();
         private final Paint pH = new Paint();
@@ -240,7 +289,6 @@ public class LenterIME extends InputMethodService {
         private int curLang = LANG_RU;
         private int lastLang = LANG_RU;
         private int shift = 0;
-        private boolean numericMode = false;
         private boolean isPreviewMode = false;
 
         private int offsetLeft = 0;
@@ -330,13 +378,6 @@ public class LenterIME extends InputMethodService {
             super(ctx);
             lowEndMode = isLowEndDevice();
 
-            if (Build.VERSION.SDK_INT >= 11) {
-                if (!lowEndMode) {
-                    setLayerType(LAYER_TYPE_HARDWARE, null);
-                } else {
-                    setLayerType(LAYER_TYPE_SOFTWARE, null);
-                }
-            }
             DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
             density = dm.density;
             screenW = dm.widthPixels;
@@ -403,7 +444,6 @@ public class LenterIME extends InputMethodService {
         }
 
         public void setLanguage(String lang) {
-            numericMode = false;
             lastLang = lang.equals("ru") ? LANG_RU : LANG_EN;
             curLang = lastLang;
             ensureLayoutBuilt(curLang);
@@ -413,7 +453,6 @@ public class LenterIME extends InputMethodService {
         }
 
         public void setNumericMode(boolean decimal) {
-            numericMode = true;
             int targetLang = LANG_NUMERIC;
             ensureLayoutBuilt(targetLang);
             curLang = targetLang;
@@ -484,99 +523,95 @@ public class LenterIME extends InputMethodService {
             float y = 0, w;
             if (langIdx == LANG_RU) {
                 w = screenW / 11f;
-                row(d, y, w, "йцукенгшщзх");
+                row(d, y, w, ROW_RU1);
                 y += keyH;
-                row(d, y, w, "фывапролджэ");
+                row(d, y, w, ROW_RU2);
                 y += keyH;
-                k(d, SHIFT_NORMAL, "SH".toCharArray(), T_SHIFT, 0, y, w * 1.5f);
-                rowW(d, y, w * 1.5f, (screenW - w * 3f) / 9f, "ячсмитьбю");
-                k(d, "⌫".toCharArray(), "DEL".toCharArray(), T_DEL, screenW - w * 1.5f, y, w * 1.5f);
+                k(d, SHIFT_NORMAL, LABEL_SH, T_SHIFT, 0, y, w * 1.5f);
+                rowW(d, y, w * 1.5f, (screenW - w * 3f) / 9f, ROW_RU3);
+                k(d, LABEL_DEL, LABEL_DEL_VAL, T_DEL, screenW - w * 1.5f, y, w * 1.5f);
                 y += keyH;
                 drawBottom(d, y);
             } else if (langIdx == LANG_EN) {
                 w = screenW / 10f;
-                row(d, y, w, "qwertyuiop");
+                row(d, y, w, ROW_EN1);
                 y += keyH;
-                rowW(d, y, w * 0.5f, w, "asdfghjkl");
+                rowW(d, y, w * 0.5f, w, ROW_EN2);
                 y += keyH;
-                k(d, SHIFT_NORMAL, "SH".toCharArray(), T_SHIFT, 0, y, w * 1.5f);
-                rowW(d, y, w * 1.5f, w, "zxcvbnm");
-                k(d, "⌫".toCharArray(), "DEL".toCharArray(), T_DEL, screenW - w * 1.5f, y, w * 1.5f);
+                k(d, SHIFT_NORMAL, LABEL_SH, T_SHIFT, 0, y, w * 1.5f);
+                rowW(d, y, w * 1.5f, w, ROW_EN3);
+                k(d, LABEL_DEL, LABEL_DEL_VAL, T_DEL, screenW - w * 1.5f, y, w * 1.5f);
                 y += keyH;
                 drawBottom(d, y);
             } else if (langIdx == LANG_SYM) {
                 w = screenW / 10f;
-                row(d, y, w, "1234567890");
+                row(d, y, w, ROW_SYM1);
                 y += keyH;
-                row(d, y, w, "@#№_&-+()/");
+                row(d, y, w, ROW_SYM2);
                 y += keyH;
-                k(d, "=\\<".toCharArray(), "EX".toCharArray(), T_SYM_EX, 0, y, w * 1.5f);
-                rowW(d, y, w * 1.5f, w, "*\"':;!?");
-                k(d, "⌫".toCharArray(), "DEL".toCharArray(), T_DEL, screenW - w * 1.5f, y, w * 1.5f);
+                k(d, "=\\<".toCharArray(), LABEL_EX, T_SYM_EX, 0, y, w * 1.5f);
+                rowW(d, y, w * 1.5f, w, ROW_SYM3);
+                k(d, LABEL_DEL, LABEL_DEL_VAL, T_DEL, screenW - w * 1.5f, y, w * 1.5f);
                 y += keyH;
                 drawBottom(d, y);
             } else if (langIdx == LANG_EXTRA) {
                 w = screenW / 11f;
-                row(d, y, w, "~`|•√π÷×¶∆●");
+                row(d, y, w, ROW_EXTRA1);
                 y += keyH;
-                row(d, y, w, "€$£¥₸₽^°={}");
+                row(d, y, w, ROW_EXTRA2);
                 y += keyH;
-                k(d, "?12".toCharArray(), "SYM".toCharArray(), T_SYM, 0, y, w * 1.5f);
-                rowW(d, y, w * 1.5f, w, "\\©®™%[]■");
-                k(d, "⌫".toCharArray(), "DEL".toCharArray(), T_DEL, screenW - w * 1.5f, y, w * 1.5f);
+                k(d, LABEL_SYM, LABEL_SYM_TOGGLE, T_SYM, 0, y, w * 1.5f);
+                rowW(d, y, w * 1.5f, w, ROW_EXTRA3);
+                k(d, LABEL_DEL, LABEL_DEL_VAL, T_DEL, screenW - w * 1.5f, y, w * 1.5f);
                 y += keyH;
                 drawBottom(d, y);
-} else if (langIdx == LANG_NUMERIC) {
-    float keyW = screenW / 5f;
-    y = 0;
-    
-    float x = 0;
-    k(d, "(".toCharArray(), "(".toCharArray(), T_CHAR, x, y, keyW);
-    x += keyW;
-    k(d, "1".toCharArray(), "1".toCharArray(), T_CHAR, x, y, keyW);
-    x += keyW;
-    k(d, "2".toCharArray(), "2".toCharArray(), T_CHAR, x, y, keyW);
-    x += keyW;
-    k(d, "3".toCharArray(), "3".toCharArray(), T_CHAR, x, y, keyW);
-    x += keyW;
-    k(d, ".".toCharArray(), ".".toCharArray(), T_CHAR, x, y, keyW);
-    y += keyH;
-    
-    x = 0;
-    k(d, ")".toCharArray(), ")".toCharArray(), T_CHAR, x, y, keyW);
-    x += keyW;
-    k(d, "4".toCharArray(), "4".toCharArray(), T_CHAR, x, y, keyW);
-    x += keyW;
-    k(d, "5".toCharArray(), "5".toCharArray(), T_CHAR, x, y, keyW);
-    x += keyW;
-    k(d, "6".toCharArray(), "6".toCharArray(), T_CHAR, x, y, keyW);
-    x += keyW;
-    k(d, ",".toCharArray(), ",".toCharArray(), T_CHAR, x, y, keyW);
-    y += keyH;
-    
-    x = 0;
-    k(d, "+".toCharArray(), "+".toCharArray(), T_CHAR, x, y, keyW);
-    x += keyW;
-    k(d, "7".toCharArray(), "7".toCharArray(), T_CHAR, x, y, keyW);
-    x += keyW;
-    k(d, "8".toCharArray(), "8".toCharArray(), T_CHAR, x, y, keyW);
-    x += keyW;
-    k(d, "9".toCharArray(), "9".toCharArray(), T_CHAR, x, y, keyW);
-    x += keyW;
-    k(d, "⌫".toCharArray(), "DEL".toCharArray(), T_DEL, x, y, keyW);
-    y += keyH;
-    
-    x = 0;
-    k(d, "-".toCharArray(), "-".toCharArray(), T_CHAR, x, y, keyW);
-    x += keyW;
-    k(d, "*".toCharArray(), "*".toCharArray(), T_CHAR, x, y, keyW);
-    x += keyW;
-    k(d, "0".toCharArray(), "0".toCharArray(), T_CHAR, x, y, keyW);
-    x += keyW;
-    k(d, "#".toCharArray(), "#".toCharArray(), T_CHAR, x, y, keyW);
-    x += keyW;
-    k(d, currentEnterIcon, "\n".toCharArray(), T_ENTER, x, y, keyW);
-} else if (langIdx == LANG_DECIMAL) {
+            } else if (langIdx == LANG_NUMERIC) {
+                float keyW = screenW / 5f;
+                y = 0;
+                float x = 0;
+                k(d, "(".toCharArray(), "(".toCharArray(), T_CHAR, x, y, keyW);
+                x += keyW;
+                k(d, "1".toCharArray(), "1".toCharArray(), T_CHAR, x, y, keyW);
+                x += keyW;
+                k(d, "2".toCharArray(), "2".toCharArray(), T_CHAR, x, y, keyW);
+                x += keyW;
+                k(d, "3".toCharArray(), "3".toCharArray(), T_CHAR, x, y, keyW);
+                x += keyW;
+                k(d, LABEL_DOT, LABEL_DOT, T_CHAR, x, y, keyW);
+                y += keyH;
+                x = 0;
+                k(d, ")".toCharArray(), ")".toCharArray(), T_CHAR, x, y, keyW);
+                x += keyW;
+                k(d, "4".toCharArray(), "4".toCharArray(), T_CHAR, x, y, keyW);
+                x += keyW;
+                k(d, "5".toCharArray(), "5".toCharArray(), T_CHAR, x, y, keyW);
+                x += keyW;
+                k(d, "6".toCharArray(), "6".toCharArray(), T_CHAR, x, y, keyW);
+                x += keyW;
+                k(d, LABEL_COMMA, LABEL_COMMA, T_CHAR, x, y, keyW);
+                y += keyH;
+                x = 0;
+                k(d, "+".toCharArray(), "+".toCharArray(), T_CHAR, x, y, keyW);
+                x += keyW;
+                k(d, "7".toCharArray(), "7".toCharArray(), T_CHAR, x, y, keyW);
+                x += keyW;
+                k(d, "8".toCharArray(), "8".toCharArray(), T_CHAR, x, y, keyW);
+                x += keyW;
+                k(d, "9".toCharArray(), "9".toCharArray(), T_CHAR, x, y, keyW);
+                x += keyW;
+                k(d, LABEL_DEL, LABEL_DEL_VAL, T_DEL, x, y, keyW);
+                y += keyH;
+                x = 0;
+                k(d, "-".toCharArray(), "-".toCharArray(), T_CHAR, x, y, keyW);
+                x += keyW;
+                k(d, "*".toCharArray(), "*".toCharArray(), T_CHAR, x, y, keyW);
+                x += keyW;
+                k(d, "0".toCharArray(), "0".toCharArray(), T_CHAR, x, y, keyW);
+                x += keyW;
+                k(d, "#".toCharArray(), "#".toCharArray(), T_CHAR, x, y, keyW);
+                x += keyW;
+                k(d, currentEnterIcon, LABEL_ENTER, T_ENTER, x, y, keyW);
+            } else if (langIdx == LANG_DECIMAL) {
             }
 
             buildAtlas(d);
@@ -608,47 +643,47 @@ public class LenterIME extends InputMethodService {
             float x = 0;
 
             float w = wSymWeight * unit;
-            char[] label = (curLang == LANG_RU || curLang == LANG_EN) ? "?12".toCharArray() : "ABC".toCharArray();
+            char[] label = (curLang == LANG_RU || curLang == LANG_EN) ? LABEL_SYM : LABEL_ABC;
             int type = (curLang == LANG_RU || curLang == LANG_EN) ? T_SYM : T_ABC;
-            k(d, label, "SYM_TOGGLE".toCharArray(), type, x, y, w);
+            k(d, label, LABEL_SYM_TOGGLE, type, x, y, w);
             x += w;
 
             w = wCommaWeight * unit;
-            char[] comma = (curLang == LANG_EXTRA) ? "<".toCharArray() : ",".toCharArray();
+            char[] comma = (curLang == LANG_EXTRA) ? LABEL_LT : LABEL_COMMA;
             k(d, comma, comma, T_CHAR, x, y, w);
             x += w;
 
             if (!isSymbolLayout) {
                 w = wLangWeight * unit;
-                char[] langLabel = (lastLang == LANG_RU) ? "RU".toCharArray() : "EN".toCharArray();
-                k(d, langLabel, "L".toCharArray(), T_LANG, x, y, w);
+                char[] langLabel = (lastLang == LANG_RU) ? LABEL_RU : LABEL_EN;
+                k(d, langLabel, LABEL_L, T_LANG, x, y, w);
                 x += w;
             }
 
             if (curLang == LANG_RU) {
                 w = wExtraWeight * unit;
-                k(d, "ё".toCharArray(), "ё".toCharArray(), T_CHAR, x, y, w);
+                k(d, LABEL_YO, LABEL_YO, T_CHAR, x, y, w);
                 x += w;
             }
 
             w = wSpaceWeight * unit;
-            k(d, " ".toCharArray(), " ".toCharArray(), T_SPACE, x, y, w);
+            k(d, LABEL_SPACE, LABEL_SPACE, T_SPACE, x, y, w);
             x += w;
 
             if (curLang == LANG_RU) {
                 w = wExtraRightWeight * unit;
-                k(d, "ъ".toCharArray(), "ъ".toCharArray(), T_CHAR, x, y, w);
+                k(d, LABEL_HARD, LABEL_HARD, T_CHAR, x, y, w);
                 x += w;
             }
 
             w = wDotWeight * unit;
-            char[] dot = (curLang == LANG_EXTRA) ? ">".toCharArray() : ".".toCharArray();
+            char[] dot = (curLang == LANG_EXTRA) ? LABEL_GT : LABEL_DOT;
             k(d, dot, dot, T_CHAR, x, y, w);
             x += w;
 
             float enterWidth = screenW - x;
             if (enterWidth < 0) enterWidth = 0;
-            k(d, currentEnterIcon, "\n".toCharArray(), T_ENTER, x, y, enterWidth);
+            k(d, currentEnterIcon, LABEL_ENTER, T_ENTER, x, y, enterWidth);
         }
 
         private void k(LayoutData d, char[] l, char[] v, int t, float x, float y, float w) {
@@ -669,27 +704,15 @@ public class LenterIME extends InputMethodService {
             d.count++;
         }
 
-        private void row(LayoutData d, float y, float w, String c) {
-            int len = c.length();
-            for (int i = 0; i < len; i++) {
-                char ch = c.charAt(i);
-                k(d, new char[]{ch}, new char[]{ch}, T_CHAR, i * w, y, w);
+        private void row(LayoutData d, float y, float w, char[] c) {
+            for (int i = 0; i < c.length; i++) {
+                k(d, new char[]{c[i]}, new char[]{c[i]}, T_CHAR, i * w, y, w);
             }
         }
 
-        private void rowW(LayoutData d, float y, float sx, float w, String c) {
-            int len = c.length();
-            for (int i = 0; i < len; i++) {
-                char ch = c.charAt(i);
-                k(d, new char[]{ch}, new char[]{ch}, T_CHAR, sx + i * w, y, w);
-            }
-        }
-
-        private void rowNumeric(LayoutData d, float y, float w, String c) {
-            int len = c.length();
-            for (int i = 0; i < len; i++) {
-                char ch = c.charAt(i);
-                k(d, new char[]{ch}, new char[]{ch}, T_CHAR, i * w, y, w);
+        private void rowW(LayoutData d, float y, float sx, float w, char[] c) {
+            for (int i = 0; i < c.length; i++) {
+                k(d, new char[]{c[i]}, new char[]{c[i]}, T_CHAR, sx + i * w, y, w);
             }
         }
 
@@ -1180,7 +1203,6 @@ public class LenterIME extends InputMethodService {
                     curLang = lastLang;
                     ensureLayoutBuilt(curLang);
                     curLayout = layouts[curLang];
-                    numericMode = false;
                 }
                 setEnterIcon(ime.getEnterIcon().toCharArray());
                 needRedrawBg = true;
@@ -1189,7 +1211,6 @@ public class LenterIME extends InputMethodService {
                 curLang = LANG_EXTRA;
                 ensureLayoutBuilt(LANG_EXTRA);
                 curLayout = layouts[LANG_EXTRA];
-                numericMode = false;
                 setEnterIcon(ime.getEnterIcon().toCharArray());
                 needRedrawBg = true;
                 invalidate();
@@ -1197,7 +1218,6 @@ public class LenterIME extends InputMethodService {
                 curLang = lastLang;
                 ensureLayoutBuilt(curLang);
                 curLayout = layouts[curLang];
-                numericMode = false;
                 setEnterIcon(ime.getEnterIcon().toCharArray());
                 needRedrawBg = true;
                 invalidate();

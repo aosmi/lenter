@@ -27,7 +27,6 @@ package com.aosmi.lenter;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.graphics.Typeface;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.Gravity;
@@ -39,7 +38,7 @@ import android.widget.RelativeLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
-// todo: разработка новой функции: разбитый экран
+// todo: оптимизация для API 10 (убраны @Override, Typeface, лишние импорты)
 
 public class MainActivity extends Activity {
 
@@ -72,7 +71,7 @@ public class MainActivity extends Activity {
         title.setText("Lenter Keyboard");
         title.setTextColor(0xFF000000);
         title.setTextSize(24);
-        title.setTypeface(null, Typeface.BOLD);
+        title.setTypeface(null, 1);
         title.setPadding(0, 0, 0, 48);
         normalModeLayout.addView(title);
 
@@ -122,7 +121,6 @@ public class MainActivity extends Activity {
         btnActivate.setBackgroundColor(0xFF252525);
         btnActivate.setPadding(80, 40, 80, 40);
         btnActivate.setOnClickListener(new View.OnClickListener() {
-            @Override
             public void onClick(View v) {
                 startActivity(new Intent(Settings.ACTION_INPUT_METHOD_SETTINGS));
             }
@@ -145,7 +143,6 @@ public class MainActivity extends Activity {
         btnBreak.setBackgroundColor(0xFF252525);
         btnBreak.setPadding(80, 40, 80, 40);
         btnBreak.setOnClickListener(new View.OnClickListener() {
-            @Override
             public void onClick(View v) {
                 showEditMode();
             }
@@ -198,7 +195,6 @@ public class MainActivity extends Activity {
         btnSave.setBackgroundColor(0xFF252525);
         btnSave.setPadding(80, 40, 80, 40);
         btnSave.setOnClickListener(new View.OnClickListener() {
-            @Override
             public void onClick(View v) {
                 saveSettingsAndExit();
             }
@@ -255,17 +251,12 @@ public class MainActivity extends Activity {
 
         row.setTag(seek);
         seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 TextView tv = (TextView) ((View) seekBar.getParent()).findViewById(android.R.id.text1);
                 tv.setText(String.valueOf(progress));
                 updatePreviewOffsets();
             }
-
-            @Override
             public void onStartTrackingTouch(SeekBar seekBar) {}
-
-            @Override
             public void onStopTrackingTouch(SeekBar seekBar) {}
         });
 
