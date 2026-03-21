@@ -103,7 +103,7 @@ public class LenterIME extends InputMethodService {
             } else {
                 keyboardView.setLanguage(lang);
             }
-            keyboardView.setEnterIcon(getEnterIcon());
+            keyboardView.setEnterIcon(getEnterIcon().toCharArray());
             keyboardView.setOffsets(sOffsetLeft, sOffsetRight, sOffsetTop, sOffsetBottom);
         }
     }
@@ -408,7 +408,6 @@ public class LenterIME extends InputMethodService {
             curLang = lastLang;
             ensureLayoutBuilt(curLang);
             curLayout = layouts[curLang];
-            setEnterIcon(currentEnterIcon);
             needRedrawBg = true;
             invalidate();
         }
@@ -419,7 +418,6 @@ public class LenterIME extends InputMethodService {
             ensureLayoutBuilt(targetLang);
             curLang = targetLang;
             curLayout = layouts[targetLang];
-            setEnterIcon(currentEnterIcon);
             needRedrawBg = true;
             invalidate();
         }
@@ -427,11 +425,12 @@ public class LenterIME extends InputMethodService {
         public void setEnterIcon(char[] icon) {
             if (!Arrays.equals(currentEnterIcon, icon)) {
                 currentEnterIcon = icon;
-                if (curLayout != null) {
-                    for (int i = 0; i < curLayout.count; i++) {
-                        if (curLayout.types[i] == T_ENTER) {
-                            curLayout.labels[i] = icon;
-                            curLayout.labelsLen[i] = icon.length;
+                for (LayoutData ld : layouts) {
+                    if (!ld.isBuilt) continue;
+                    for (int i = 0; i < ld.count; i++) {
+                        if (ld.types[i] == T_ENTER) {
+                            ld.labels[i] = icon;
+                            ld.labelsLen[i] = icon.length;
                             break;
                         }
                     }
@@ -439,10 +438,6 @@ public class LenterIME extends InputMethodService {
                 needRedrawBg = true;
                 invalidate();
             }
-        }
-
-        public void setEnterIcon(String icon) {
-            setEnterIcon(icon.toCharArray());
         }
 
         public void setOffsets(int left, int right, int top, int bottom) {
@@ -531,34 +526,57 @@ public class LenterIME extends InputMethodService {
                 k(d, "⌫".toCharArray(), "DEL".toCharArray(), T_DEL, screenW - w * 1.5f, y, w * 1.5f);
                 y += keyH;
                 drawBottom(d, y);
-            } else if (langIdx == LANG_NUMERIC) {
-                float keyW = screenW / 4f;
-                y = 0;
-                rowNumeric(d, y, keyW, "123(");
-                y += keyH;
-                rowNumeric(d, y, keyW, "456)");
-                y += keyH;
-                float x = 0;
-                k(d, "7".toCharArray(), "7".toCharArray(), T_CHAR, x, y, keyW);
-                x += keyW;
-                k(d, "8".toCharArray(), "8".toCharArray(), T_CHAR, x, y, keyW);
-                x += keyW;
-                k(d, "9".toCharArray(), "9".toCharArray(), T_CHAR, x, y, keyW);
-                x += keyW;
-                k(d, "ABC".toCharArray(), "ABC".toCharArray(), T_ABC, x, y, keyW);
-                y += keyH;
-                float keyW5 = screenW / 5f;
-                x = 0;
-                k(d, ".".toCharArray(), ".".toCharArray(), T_CHAR, x, y, keyW5);
-                x += keyW5;
-                k(d, "0".toCharArray(), "0".toCharArray(), T_CHAR, x, y, keyW5);
-                x += keyW5;
-                k(d, "+".toCharArray(), "+".toCharArray(), T_CHAR, x, y, keyW5);
-                x += keyW5;
-                k(d, "⌫".toCharArray(), "DEL".toCharArray(), T_DEL, x, y, keyW5);
-                x += keyW5;
-                k(d, currentEnterIcon, "\n".toCharArray(), T_ENTER, x, y, keyW5);
-            } else if (langIdx == LANG_DECIMAL) {
+} else if (langIdx == LANG_NUMERIC) {
+    float keyW = screenW / 5f;
+    y = 0;
+    
+    float x = 0;
+    k(d, "(".toCharArray(), "(".toCharArray(), T_CHAR, x, y, keyW);
+    x += keyW;
+    k(d, "1".toCharArray(), "1".toCharArray(), T_CHAR, x, y, keyW);
+    x += keyW;
+    k(d, "2".toCharArray(), "2".toCharArray(), T_CHAR, x, y, keyW);
+    x += keyW;
+    k(d, "3".toCharArray(), "3".toCharArray(), T_CHAR, x, y, keyW);
+    x += keyW;
+    k(d, ".".toCharArray(), ".".toCharArray(), T_CHAR, x, y, keyW);
+    y += keyH;
+    
+    x = 0;
+    k(d, ")".toCharArray(), ")".toCharArray(), T_CHAR, x, y, keyW);
+    x += keyW;
+    k(d, "4".toCharArray(), "4".toCharArray(), T_CHAR, x, y, keyW);
+    x += keyW;
+    k(d, "5".toCharArray(), "5".toCharArray(), T_CHAR, x, y, keyW);
+    x += keyW;
+    k(d, "6".toCharArray(), "6".toCharArray(), T_CHAR, x, y, keyW);
+    x += keyW;
+    k(d, ",".toCharArray(), ",".toCharArray(), T_CHAR, x, y, keyW);
+    y += keyH;
+    
+    x = 0;
+    k(d, "+".toCharArray(), "+".toCharArray(), T_CHAR, x, y, keyW);
+    x += keyW;
+    k(d, "7".toCharArray(), "7".toCharArray(), T_CHAR, x, y, keyW);
+    x += keyW;
+    k(d, "8".toCharArray(), "8".toCharArray(), T_CHAR, x, y, keyW);
+    x += keyW;
+    k(d, "9".toCharArray(), "9".toCharArray(), T_CHAR, x, y, keyW);
+    x += keyW;
+    k(d, "⌫".toCharArray(), "DEL".toCharArray(), T_DEL, x, y, keyW);
+    y += keyH;
+    
+    x = 0;
+    k(d, "-".toCharArray(), "-".toCharArray(), T_CHAR, x, y, keyW);
+    x += keyW;
+    k(d, "*".toCharArray(), "*".toCharArray(), T_CHAR, x, y, keyW);
+    x += keyW;
+    k(d, "0".toCharArray(), "0".toCharArray(), T_CHAR, x, y, keyW);
+    x += keyW;
+    k(d, "#".toCharArray(), "#".toCharArray(), T_CHAR, x, y, keyW);
+    x += keyW;
+    k(d, currentEnterIcon, "\n".toCharArray(), T_ENTER, x, y, keyW);
+} else if (langIdx == LANG_DECIMAL) {
             }
 
             buildAtlas(d);
@@ -1135,7 +1153,7 @@ public class LenterIME extends InputMethodService {
                     curLang = lastLang;
                     ensureLayoutBuilt(curLang);
                     curLayout = layouts[curLang];
-                    setEnterIcon(currentEnterIcon);
+                    setEnterIcon(ime.getEnterIcon().toCharArray());
                     needRedrawBg = true;
                     invalidate();
                 } else {
@@ -1164,7 +1182,7 @@ public class LenterIME extends InputMethodService {
                     curLayout = layouts[curLang];
                     numericMode = false;
                 }
-                setEnterIcon(currentEnterIcon);
+                setEnterIcon(ime.getEnterIcon().toCharArray());
                 needRedrawBg = true;
                 invalidate();
             } else if (t == T_SYM_EX) {
@@ -1172,7 +1190,7 @@ public class LenterIME extends InputMethodService {
                 ensureLayoutBuilt(LANG_EXTRA);
                 curLayout = layouts[LANG_EXTRA];
                 numericMode = false;
-                setEnterIcon(currentEnterIcon);
+                setEnterIcon(ime.getEnterIcon().toCharArray());
                 needRedrawBg = true;
                 invalidate();
             } else if (t == T_ABC) {
@@ -1180,7 +1198,7 @@ public class LenterIME extends InputMethodService {
                 ensureLayoutBuilt(curLang);
                 curLayout = layouts[curLang];
                 numericMode = false;
-                setEnterIcon(currentEnterIcon);
+                setEnterIcon(ime.getEnterIcon().toCharArray());
                 needRedrawBg = true;
                 invalidate();
             }
