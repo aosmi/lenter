@@ -12,6 +12,7 @@
 * Drawing on Canvas.
 * Complex objects and functions were "cut out" as a victim of optimization and moved to a single file.
 * "Break screen" function for phones with broken screen.
+* New themes: material, soft, lenter.
 
 ## Technical Characteristics:
 #### Gradle: 8.0
@@ -19,4 +20,4 @@
 #### DSL: Groovy DSL
 #### API: 10 – 35 (Android 2.3.7 – Android 15)
 ---
-### second life a died phones.
+### Second life a died phones.

@@ -25,6 +25,8 @@ package com.aosmi.lenter;
  */
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
@@ -37,8 +39,6 @@ import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
-
-// todo: оптимизация для API 10 (убраны @Override, Typeface, лишние импорты)
 
 public class MainActivity extends Activity {
 
@@ -53,6 +53,10 @@ public class MainActivity extends Activity {
 
     private int rootPaddingLeft, rootPaddingRight;
     private int editPaddingLeft, editPaddingRight;
+
+    private static final char[] DIVIDER = "------------------------".toCharArray();
+    private static final String[] THEME_NAMES = {"Material", "Soft (мягкий)", "Lenter"};
+    private static final int[] THEME_VALUES = {1, 2, 0};
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -92,7 +96,7 @@ public class MainActivity extends Activity {
         normalModeLayout.addView(dEN);
 
         TextView rz = new TextView(this);
-        rz.setText("------------------------");
+        rz.setText(new String(DIVIDER));
         rz.setTextColor(0xFF000000);
         rz.setTextSize(14);
         rz.setPadding(0, 0, 0, 16);
@@ -130,7 +134,7 @@ public class MainActivity extends Activity {
         normalModeLayout.addView(btnWrap);
 
         TextView krz = new TextView(this);
-        krz.setText("------------------------");
+        krz.setText(new String(DIVIDER));
         krz.setTextColor(0xFF000000);
         krz.setTextSize(14);
         krz.setPadding(0, 0, 0, 16);
@@ -150,6 +154,36 @@ public class MainActivity extends Activity {
         FrameLayout btnBreakWrap = new FrameLayout(this);
         btnBreakWrap.addView(btnBreak);
         normalModeLayout.addView(btnBreakWrap);
+
+        TextView themeDescRU = new TextView(this);
+        themeDescRU.setText("Выберите тему оформления клавиатуры: нажмите “Тема” и выберите вариант.");
+        themeDescRU.setTextColor(0xFF000000);
+        themeDescRU.setTextSize(12);
+        themeDescRU.setPadding(0, 0, 0, 16);
+        themeDescRU.setGravity(Gravity.CENTER);
+        normalModeLayout.addView(themeDescRU);
+
+        TextView themeDescEN = new TextView(this);
+        themeDescEN.setText("Choose keyboard theme: press “Theme” and select an option.");
+        themeDescEN.setTextColor(0xFF000000);
+        themeDescEN.setTextSize(12);
+        themeDescEN.setPadding(0, 0, 0, 32);
+        themeDescEN.setGravity(Gravity.CENTER);
+        normalModeLayout.addView(themeDescEN);
+
+        TextView btnTheme = new TextView(this);
+        btnTheme.setText("Тема");
+        btnTheme.setTextColor(0xFFFFFFFF);
+        btnTheme.setBackgroundColor(0xFF252525);
+        btnTheme.setPadding(80, 40, 80, 40);
+        btnTheme.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                showThemeDialog();
+            }
+        });
+        FrameLayout btnThemeWrap = new FrameLayout(this);
+        btnThemeWrap.addView(btnTheme);
+        normalModeLayout.addView(btnThemeWrap);
 
         root.addView(normalModeLayout);
 
@@ -265,7 +299,7 @@ public class MainActivity extends Activity {
 
     private void createPreviewKeyboard(FrameLayout container) {
         float density = getResources().getDisplayMetrics().density;
-        int height = (int) (250 * density + 0.5f);
+        int height = (int) (260 * density + 0.5f);
         String lang = prefs.getString("active_lang", "ru");
 
         previewKeyboard = new LenterIME.KeyboardView(this);
@@ -273,6 +307,7 @@ public class MainActivity extends Activity {
         previewKeyboard.setParams(height, lang);
         previewKeyboard.setOffsets(seekLeft.getProgress(), seekRight.getProgress(),
                                    seekTop.getProgress(), seekBottom.getProgress());
+        previewKeyboard.setTheme(prefs.getInt("theme", 1));
 
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, height);
@@ -314,6 +349,22 @@ public class MainActivity extends Activity {
 
         LenterIME.updateOffsets(this);
         exitEditMode();
+    }
+
+    private void showThemeDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Выберите тему / Select theme");
+        builder.setItems(THEME_NAMES, new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int which) {
+                int theme = THEME_VALUES[which];
+                prefs.edit().putInt("theme", theme).apply();
+                LenterIME.updateTheme(MainActivity.this);
+                if (previewKeyboard != null) {
+                    previewKeyboard.setTheme(theme);
+                }
+            }
+        });
+        builder.show();
     }
 
     private void showEditMode() {
