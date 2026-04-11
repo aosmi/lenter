@@ -19,5 +19,3 @@
 #### Language: Java
 #### DSL: Groovy DSL
 #### API: 10 – 35 (Android 2.3.7 – Android 15)
----
-### Second life a died phones.
