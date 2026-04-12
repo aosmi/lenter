@@ -29,7 +29,6 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.*;
 import android.inputmethodservice.InputMethodService;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextPaint;
@@ -58,14 +57,12 @@ public class LenterIME extends InputMethodService {
     private static final int TYPE_CLASS_NUMBER = 0x2;
     private static final int TYPE_CLASS_PHONE = 0x3;
     private static final int TYPE_NUMBER_FLAG_DECIMAL = 0x2000;
-    private static final int TYPE_TEXT_FLAG_MULTI_LINE = 0x20000;
 
     private static int sOffsetLeft = 0;
     private static int sOffsetRight = 0;
     private static int sOffsetTop = 0;
     private static int sOffsetBottom = 0;
     private static boolean sOffsetsChanged = false;
-
     private static int sTheme = 1;
 
     public static void updateOffsets(Context context) {
@@ -132,8 +129,7 @@ public class LenterIME extends InputMethodService {
     public boolean isNumericInput() {
         if (currentEditorInfo == null) return false;
         int inputClass = currentEditorInfo.inputType & TYPE_MASK_CLASS;
-        return inputClass == TYPE_CLASS_NUMBER ||
-               inputClass == TYPE_CLASS_PHONE;
+        return inputClass == TYPE_CLASS_NUMBER || inputClass == TYPE_CLASS_PHONE;
     }
 
     public boolean isDecimalInput() {
@@ -149,17 +145,17 @@ public class LenterIME extends InputMethodService {
     public String getEnterIcon() {
         if (currentEditorInfo == null) return "↵";
         int imeOptions = currentEditorInfo.imeOptions;
-        if (Build.VERSION.SDK_INT >= 11 && (imeOptions & IME_FLAG_NO_ENTER_ACTION) != 0) {
+        if ((imeOptions & IME_FLAG_NO_ENTER_ACTION) != 0) {
             return "↵";
         }
         int action = imeOptions & EditorInfo.IME_MASK_ACTION;
         switch (action) {
             case IME_ACTION_SEARCH: return "⌕";
             case IME_ACTION_SEND:   return "➤";
-            case IME_ACTION_NEXT:    return "→";
-            case IME_ACTION_DONE:    return "✓";
-            case IME_ACTION_GO:      return "➤";
-            case IME_ACTION_PREVIOUS:return "←";
+            case IME_ACTION_NEXT:   return "→";
+            case IME_ACTION_DONE:   return "✓";
+            case IME_ACTION_GO:     return "➤";
+            case IME_ACTION_PREVIOUS: return "←";
             default: return "↵";
         }
     }
@@ -176,12 +172,7 @@ public class LenterIME extends InputMethodService {
     public void handleEnter() {
         InputConnection ic = getCurrentInputConnection();
         if (ic == null || currentEditorInfo == null) return;
-
-        boolean noEnterAction = false;
-        if (Build.VERSION.SDK_INT >= 11) {
-            noEnterAction = (currentEditorInfo.imeOptions & IME_FLAG_NO_ENTER_ACTION) != 0;
-        }
-
+        boolean noEnterAction = (currentEditorInfo.imeOptions & IME_FLAG_NO_ENTER_ACTION) != 0;
         if (!noEnterAction && currentEnterAction != 0) {
             ic.performEditorAction(currentEnterAction);
         } else {
@@ -207,7 +198,6 @@ public class LenterIME extends InputMethodService {
     }
 
     public static class KeyboardView extends View {
-
         private final Rect tempRect = new Rect();
         private final RectF tempRectF = new RectF();
         private final Rect tempSrcRect = new Rect();
@@ -219,13 +209,6 @@ public class LenterIME extends InputMethodService {
         private static final int M3_ACCENT = 0xFFA8C7FA;
         private static final int M3_ON_ACCENT = 0xFF062E6F;
         private static final int M3_TEXT = 0xFFE2E2E2;
-
-        private static final int SOFT_BG = 0xFFF5F5F5;
-        private static final int SOFT_KEY = 0xFFEEEEEE;
-        private static final int SOFT_SPECIAL = 0xFFE8E8E8;
-        private static final int SOFT_ACCENT = 0xFFD4E0FF;
-        private static final int SOFT_ON_ACCENT = 0xFF4A5B6E;
-        private static final int SOFT_TEXT = 0xFF6B7280;
 
         private static final int LENTER_BG = Color.BLACK;
         private static final int LENTER_KEY = 0xFF252525;
@@ -245,8 +228,7 @@ public class LenterIME extends InputMethodService {
         private static final int LANG_SYM = 2;
         private static final int LANG_EXTRA = 3;
         private static final int LANG_NUMERIC = 4;
-        private static final int LANG_DECIMAL = 5;
-        private static final int TOTAL_LAYOUTS = 6;
+        private static final int TOTAL_LAYOUTS = 5;
 
         private static final char[] SHIFT_NORMAL = "⇧".toCharArray();
         private static final char[] SHIFT_SINGLE = "⬆".toCharArray();
@@ -284,17 +266,12 @@ public class LenterIME extends InputMethodService {
         private static final char[] LABEL_SYM_TOGGLE = "SYM_TOGGLE".toCharArray();
         private static final char[] LABEL_L = "L".toCharArray();
 
-        private final Paint pKeyMain = new Paint();
+        private final Paint pKeyMain = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final TextPaint pText = new TextPaint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint pPre = new Paint();
+        private final Paint pPre = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final TextPaint pPreT = new TextPaint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint pAtlas = new Paint();
-
-        private ColorFilter m3TextFilter;
-        private ColorFilter m3AccentFilter;
-        private ColorFilter softTextFilter;
-        private ColorFilter softAccentFilter;
-        private ColorFilter lenterTextFilter;
+        private final Paint pAtlas = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint pBorder = new Paint(Paint.ANTI_ALIAS_FLAG);
 
         private LenterIME ime;
         private int screenW;
@@ -308,14 +285,9 @@ public class LenterIME extends InputMethodService {
         private int shift = 0;
         private boolean isPreviewMode = false;
 
-        private int offsetLeft = 0;
-        private int offsetRight = 0;
-        private int offsetTop = 0;
-        private int offsetBottom = 0;
+        private int offsetLeft, offsetRight, offsetTop, offsetBottom;
         private float scale = 1f;
-        private float translateX = 0;
-        private float translateY = 0;
-
+        private float translateX, translateY;
         private int currentTheme = 1;
 
         private static class LayoutData {
@@ -341,9 +313,7 @@ public class LenterIME extends InputMethodService {
 
         private static Bitmap sGlobalAtlas;
         private static int[] sCharToAtlasIndex;
-        private static int sAtlasCols;
-        private static int sAtlasCellW;
-        private static int sAtlasCellH;
+        private static int sAtlasCols, sAtlasCellW, sAtlasCellH;
         private static boolean sGlobalAtlasBuilt = false;
 
         private int[] pointerIds = new int[5];
@@ -361,37 +331,18 @@ public class LenterIME extends InputMethodService {
             }
         };
 
-        private final char[] tmpChar = new char[1];
         private char[] currentEnterIcon = "↵".toCharArray();
-
-        private static class RectPool {
-            private Rect rect1 = new Rect();
-            private Rect rect2 = new Rect();
-            private Rect rect3 = new Rect();
-            private int index = 0;
-            Rect obtain() {
-                index = (index + 1) % 3;
-                switch (index) {
-                    case 0: return rect1;
-                    case 1: return rect2;
-                    default: return rect3;
-                }
-            }
-        }
-        private RectPool rectPool = new RectPool();
-
+        private Bitmap bgBitmap;
+        private Canvas bgCanvas;
+        private boolean needRedrawBg = true;
+        private int prevWidth = -1, prevHeight = -1;
         private boolean lowEndMode;
 
         private boolean isLowEndDevice() {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN) {
-                return true;
-            }
             ActivityManager am = (ActivityManager) getContext().getSystemService(Context.ACTIVITY_SERVICE);
-            ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
-            am.getMemoryInfo(mi);
+            int memClass = am.getMemoryClass();
             int cores = Runtime.getRuntime().availableProcessors();
-            long totalMem = mi.totalMem / (1024 * 1024);
-            return cores <= 2 || totalMem < 512;
+            return cores <= 2 || memClass < 32;
         }
 
         public KeyboardView(Context ctx) {
@@ -405,33 +356,25 @@ public class LenterIME extends InputMethodService {
             gapPx = 2 * density;
             radiusPx = 6 * density;
             previewRadPx = 26 * density;
+            previewHeight = (int) (50 * density);
 
             float fontSizeNormal = 22 * density;
             float fontSizePreview = 32 * density;
-            previewHeight = (int) (50 * density);
 
-            Typeface tf = Typeface.create("sans-serif-medium", Typeface.NORMAL);
+            Typeface tf = Typeface.create("sans-serif", Typeface.NORMAL);
             pText.setTypeface(tf);
             pPreT.setTypeface(tf);
-
-            pKeyMain.setAntiAlias(true);
-            pText.setColor(Color.WHITE);
             pText.setTextAlign(Paint.Align.CENTER);
-            pText.setTextSize(fontSizeNormal);
-            pText.setFakeBoldText(false);
-            pPre.setColor(0xEE252525);
-            pPreT.setColor(Color.WHITE);
             pPreT.setTextAlign(Paint.Align.CENTER);
+            pText.setTextSize(fontSizeNormal);
             pPreT.setTextSize(fontSizePreview);
+            pText.setColor(Color.WHITE);
+            pPreT.setColor(Color.WHITE);
+            pPre.setColor(0xEE252525);
             pAtlas.setColor(Color.WHITE);
-            pAtlas.setAlpha(255);
             pAtlas.setFilterBitmap(false);
-
-            m3TextFilter = new PorterDuffColorFilter(M3_TEXT, PorterDuff.Mode.SRC_IN);
-            m3AccentFilter = new PorterDuffColorFilter(M3_ON_ACCENT, PorterDuff.Mode.SRC_IN);
-            softTextFilter = new PorterDuffColorFilter(SOFT_TEXT, PorterDuff.Mode.SRC_IN);
-            softAccentFilter = new PorterDuffColorFilter(SOFT_ON_ACCENT, PorterDuff.Mode.SRC_IN);
-            lenterTextFilter = new PorterDuffColorFilter(LENTER_TEXT, PorterDuff.Mode.SRC_IN);
+            pBorder.setStyle(Paint.Style.STROKE);
+            pBorder.setStrokeWidth(2 * density);
 
             textBaselineOffset = (pText.descent() + pText.ascent()) / 2f;
             previewBaselineOffset = (pPreT.descent() + pPreT.ascent()) / 2f;
@@ -452,7 +395,6 @@ public class LenterIME extends InputMethodService {
                 Arrays.fill(layouts[i].normalIdx, (byte) -1);
                 Arrays.fill(layouts[i].shiftIdx, (byte) -1);
             }
-
             ensureGlobalAtlas();
         }
 
@@ -465,16 +407,16 @@ public class LenterIME extends InputMethodService {
         }
 
         public void setIsPreviewMode(boolean preview) {
-            this.isPreviewMode = preview;
+            isPreviewMode = preview;
         }
 
         public void setImeService(LenterIME s) {
-            this.ime = s;
+            ime = s;
         }
 
         public void setParams(int h, String l) {
-            this.keyH = (h - previewHeight) / 4f;
-            this.lastLang = (l.equals("ru") ? LANG_RU : LANG_EN);
+            keyH = (h - previewHeight) / 4f;
+            lastLang = l.equals("ru") ? LANG_RU : LANG_EN;
             if (screenW > 0) {
                 ensureLayoutBuilt(lastLang);
                 curLang = lastLang;
@@ -494,39 +436,28 @@ public class LenterIME extends InputMethodService {
         }
 
         public void setNumericMode(boolean decimal) {
-            int targetLang = LANG_NUMERIC;
-            ensureLayoutBuilt(targetLang);
-            curLang = targetLang;
-            curLayout = layouts[targetLang];
+            ensureLayoutBuilt(LANG_NUMERIC);
+            curLang = LANG_NUMERIC;
+            curLayout = layouts[LANG_NUMERIC];
             needRedrawBg = true;
             invalidate();
         }
 
         public void setEnterIcon(char[] icon) {
-            boolean same = currentEnterIcon.length == icon.length;
-            if (same) {
-                for (int i = 0; i < icon.length; i++) {
-                    if (currentEnterIcon[i] != icon[i]) {
-                        same = false;
+            if (Arrays.equals(currentEnterIcon, icon)) return;
+            currentEnterIcon = icon;
+            for (LayoutData ld : layouts) {
+                if (!ld.isBuilt) continue;
+                for (int i = 0; i < ld.count; i++) {
+                    if (ld.types[i] == T_ENTER) {
+                        ld.labels[i] = icon;
+                        ld.labelsLen[i] = icon.length;
                         break;
                     }
                 }
             }
-            if (!same) {
-                currentEnterIcon = icon;
-                for (LayoutData ld : layouts) {
-                    if (!ld.isBuilt) continue;
-                    for (int i = 0; i < ld.count; i++) {
-                        if (ld.types[i] == T_ENTER) {
-                            ld.labels[i] = icon;
-                            ld.labelsLen[i] = icon.length;
-                            break;
-                        }
-                    }
-                }
-                needRedrawBg = true;
-                invalidate();
-            }
+            needRedrawBg = true;
+            invalidate();
         }
 
         public void setOffsets(int left, int right, int top, int bottom) {
@@ -551,24 +482,20 @@ public class LenterIME extends InputMethodService {
                 translateY = offsetTop + (availableH - contentH * scale) / 2f;
             } else {
                 scale = 1f;
-                translateX = 0;
-                translateY = 0;
+                translateX = translateY = 0;
             }
-
             needRedrawBg = true;
             invalidate();
         }
 
         private void ensureLayoutBuilt(int lang) {
-            if (!layouts[lang].isBuilt) {
-                buildLayout(lang);
-            }
+            if (!layouts[lang].isBuilt) buildLayout(lang);
         }
 
         private void buildLayout(int langIdx) {
             LayoutData d = layouts[langIdx];
             d.count = 0;
-            for (int i = 0; i < 4; i++) d.gridCount[i] = 0;
+            Arrays.fill(d.gridCount, 0);
 
             float y = 0, w;
             if (langIdx == LANG_RU) {
@@ -665,7 +592,6 @@ public class LenterIME extends InputMethodService {
                 x += keyW;
                 k(d, currentEnterIcon, LABEL_ENTER, T_ENTER, x, y, keyW);
             }
-
             buildAtlas(d);
             buildHitmap(d);
             d.isBuilt = true;
@@ -679,18 +605,10 @@ public class LenterIME extends InputMethodService {
             float wSpaceWeight = 3.5f;
             float wExtraRightWeight = (curLang == LANG_RU) ? 1.0f : 0f;
             float wDotWeight = 1.2f;
-            float wEnterWeight = 1.7f;
-
             boolean isSymbolLayout = (curLang == LANG_SYM || curLang == LANG_EXTRA);
-            float totalWeight;
-            if (isSymbolLayout) {
-                totalWeight = wSymWeight + wCommaWeight + wExtraWeight + wSpaceWeight +
-                             wExtraRightWeight + wDotWeight + wEnterWeight;
-            } else {
-                totalWeight = wSymWeight + wCommaWeight + wLangWeight + wExtraWeight +
-                             wSpaceWeight + wExtraRightWeight + wDotWeight + wEnterWeight;
-            }
-
+            float totalWeight = isSymbolLayout ?
+                wSymWeight + wCommaWeight + wExtraWeight + wSpaceWeight + wExtraRightWeight + wDotWeight + 1.7f :
+                wSymWeight + wCommaWeight + wLangWeight + wExtraWeight + wSpaceWeight + wExtraRightWeight + wDotWeight + 1.7f;
             float unit = screenW / totalWeight;
             float x = 0;
 
@@ -741,54 +659,33 @@ public class LenterIME extends InputMethodService {
         private void k(LayoutData d, char[] l, char[] v, int t, float x, float y, float w) {
             int base = d.count * 4;
             d.keyCoords[base] = x;
-            d.keyCoords[base + 1] = y;
-            d.keyCoords[base + 2] = x + w;
-            d.keyCoords[base + 3] = y + keyH;
-
+            d.keyCoords[base+1] = y;
+            d.keyCoords[base+2] = x + w;
+            d.keyCoords[base+3] = y + keyH;
             d.labels[d.count] = l;
             d.labelsLen[d.count] = l.length;
             d.values[d.count] = v;
             d.valuesLen[d.count] = v.length;
             d.types[d.count] = (byte) t;
-
             int r = (int) (y / keyH);
             if (r >= 0 && r < 4) d.grid[r][d.gridCount[r]++] = (byte) d.count;
             d.count++;
         }
 
         private void k(LayoutData d, char l, char v, int t, float x, float y, float w) {
-            int base = d.count * 4;
-            d.keyCoords[base] = x;
-            d.keyCoords[base + 1] = y;
-            d.keyCoords[base + 2] = x + w;
-            d.keyCoords[base + 3] = y + keyH;
-
-            d.labels[d.count] = new char[]{l};
-            d.labelsLen[d.count] = 1;
-            d.values[d.count] = new char[]{v};
-            d.valuesLen[d.count] = 1;
-            d.types[d.count] = (byte) t;
-
-            int r = (int) (y / keyH);
-            if (r >= 0 && r < 4) d.grid[r][d.gridCount[r]++] = (byte) d.count;
-            d.count++;
+            k(d, new char[]{l}, new char[]{v}, t, x, y, w);
         }
 
         private void row(LayoutData d, float y, float w, char[] c) {
-            for (int i = 0; i < c.length; i++) {
-                k(d, c[i], c[i], T_CHAR, i * w, y, w);
-            }
+            for (int i = 0; i < c.length; i++) k(d, c[i], c[i], T_CHAR, i * w, y, w);
         }
 
         private void rowW(LayoutData d, float y, float sx, float w, char[] c) {
-            for (int i = 0; i < c.length; i++) {
-                k(d, c[i], c[i], T_CHAR, sx + i * w, y, w);
-            }
+            for (int i = 0; i < c.length; i++) k(d, c[i], c[i], T_CHAR, sx + i * w, y, w);
         }
 
         private void ensureGlobalAtlas() {
             if (sGlobalAtlasBuilt) return;
-
             char[] all = {
                 'а','б','в','г','д','е','ё','ж','з','и','й','к','л','м','н','о','п','р','с','т','у','ф','х','ц','ч','ш','щ','ъ','ы','ь','э','ю','я',
                 'А','Б','В','Г','Д','Е','Ё','Ж','З','И','Й','К','Л','М','Н','О','П','Р','С','Т','У','Ф','Х','Ц','Ч','Ш','Щ','Ъ','Ы','Ь','Э','Ю','Я',
@@ -798,23 +695,12 @@ public class LenterIME extends InputMethodService {
                 '€','$','£','¥','₸','₽','^','°','=','{','}','\\','©','®','™','%','[',']','■',
                 '↵','⌕','➤','→','✓','←','⌫'
             };
-
             boolean[] seen = new boolean[Character.MAX_VALUE + 1];
             int uniqueCount = 0;
-            for (char ch : all) {
-                if (!seen[ch]) {
-                    seen[ch] = true;
-                    uniqueCount++;
-                }
-            }
+            for (char ch : all) if (!seen[ch]) { seen[ch] = true; uniqueCount++; }
             char[] list = new char[uniqueCount];
             int idx = 0;
-            for (char ch : all) {
-                if (seen[ch]) {
-                    list[idx++] = ch;
-                    seen[ch] = false;
-                }
-            }
+            for (char ch : all) if (seen[ch]) { list[idx++] = ch; seen[ch] = false; }
 
             float maxWidth = 0;
             for (char ch : list) {
@@ -822,15 +708,14 @@ public class LenterIME extends InputMethodService {
                 if (w > maxWidth) maxWidth = w;
             }
             sAtlasCellW = (int) maxWidth + 4;
-            sAtlasCellH = (int) (pText.getFontSpacing() + 2);
+            float fontHeight = pText.descent() - pText.ascent();
+            sAtlasCellH = (int) fontHeight + 4;
             sAtlasCols = (int) Math.sqrt(uniqueCount) + 1;
             int rows = (uniqueCount + sAtlasCols - 1) / sAtlasCols;
             int atlasWidth = sAtlasCols * sAtlasCellW;
             int atlasHeight = rows * sAtlasCellH;
 
-            if (sGlobalAtlas != null) {
-                sGlobalAtlas.recycle();
-            }
+            if (sGlobalAtlas != null) sGlobalAtlas.recycle();
             sGlobalAtlas = Bitmap.createBitmap(atlasWidth, atlasHeight, Bitmap.Config.ALPHA_8);
             sCharToAtlasIndex = new int[Character.MAX_VALUE + 1];
             Arrays.fill(sCharToAtlasIndex, -1);
@@ -838,8 +723,6 @@ public class LenterIME extends InputMethodService {
             Canvas c = new Canvas(sGlobalAtlas);
             Paint paint = new Paint(pText);
             paint.setColor(Color.WHITE);
-            paint.setTextAlign(Paint.Align.CENTER);
-
             for (int i = 0; i < uniqueCount; i++) {
                 char ch = list[i];
                 sCharToAtlasIndex[ch] = i;
@@ -849,7 +732,6 @@ public class LenterIME extends InputMethodService {
                 float y = row * sAtlasCellH + (sAtlasCellH - pText.descent() - pText.ascent()) / 2f;
                 c.drawText(String.valueOf(ch), x, y, paint);
             }
-
             sGlobalAtlasBuilt = true;
         }
 
@@ -859,56 +741,39 @@ public class LenterIME extends InputMethodService {
                 if (d.types[i] == T_CHAR) {
                     char c = d.labels[i][0];
                     char cu = Character.toUpperCase(c);
-                    if (c < sCharToAtlasIndex.length) {
-                        d.normalIdx[i] = (byte) sCharToAtlasIndex[c];
-                    }
-                    if (cu < sCharToAtlasIndex.length) {
-                        d.shiftIdx[i] = (byte) sCharToAtlasIndex[cu];
-                    }
+                    if (c < sCharToAtlasIndex.length) d.normalIdx[i] = (byte) sCharToAtlasIndex[c];
+                    if (cu < sCharToAtlasIndex.length) d.shiftIdx[i] = (byte) sCharToAtlasIndex[cu];
                 }
             }
         }
 
         private static final int HITMAP_SCALE = 4;
-
         private void buildHitmap(LayoutData d) {
             d.hitmapW = screenW / HITMAP_SCALE + 1;
             d.hitmapH = (int) (keyH * 4) / HITMAP_SCALE + 1;
             int size = d.hitmapW * d.hitmapH;
-            if (d.hitmap == null || d.hitmap.length != size) {
-                d.hitmap = new byte[size];
-            }
+            if (d.hitmap == null || d.hitmap.length != size) d.hitmap = new byte[size];
             Arrays.fill(d.hitmap, (byte) -1);
             d.hitmapStride = d.hitmapW;
-
             for (int i = 0; i < d.count; i++) {
                 int base = i * 4;
                 int l = Math.max(0, (int) d.keyCoords[base]) / HITMAP_SCALE;
-                int t = Math.max(0, (int) d.keyCoords[base + 1]) / HITMAP_SCALE;
-                int r = Math.min(d.hitmapW - 1, (int) Math.ceil(d.keyCoords[base + 2]) / HITMAP_SCALE);
-                int b = Math.min(d.hitmapH - 1, (int) Math.ceil(d.keyCoords[base + 3]) / HITMAP_SCALE);
+                int t = Math.max(0, (int) d.keyCoords[base+1]) / HITMAP_SCALE;
+                int r = Math.min(d.hitmapW-1, (int) Math.ceil(d.keyCoords[base+2]) / HITMAP_SCALE);
+                int b = Math.min(d.hitmapH-1, (int) Math.ceil(d.keyCoords[base+3]) / HITMAP_SCALE);
                 for (int y = t; y <= b; y++) {
                     int off = y * d.hitmapStride;
-                    for (int x = l; x <= r; x++) {
-                        d.hitmap[off + x] = (byte) i;
-                    }
+                    for (int x = l; x <= r; x++) d.hitmap[off + x] = (byte) i;
                 }
             }
         }
-
-        private Bitmap bgBitmap;
-        private Canvas bgCanvas;
-        private boolean needRedrawBg = true;
-        private int prevWidth = -1, prevHeight = -1;
 
         @Override
         protected void onSizeChanged(int w, int h, int oldw, int oldh) {
             super.onSizeChanged(w, h, oldw, oldh);
             screenW = w;
             keyH = (h - previewHeight) / 4f;
-            for (int i = 0; i < TOTAL_LAYOUTS; i++) {
-                layouts[i].isBuilt = false;
-            }
+            for (int i = 0; i < TOTAL_LAYOUTS; i++) layouts[i].isBuilt = false;
             ensureLayoutBuilt(curLang);
             curLayout = layouts[curLang];
             setOffsets(offsetLeft, offsetRight, offsetTop, offsetBottom);
@@ -919,65 +784,36 @@ public class LenterIME extends InputMethodService {
                 if (type == T_ENTER) return pressed ? 0xFF606060 : LENTER_ACCENT;
                 if (type == T_CHAR || type == T_SPACE) return pressed ? 0xFF404040 : LENTER_KEY;
                 return pressed ? 0xFF303030 : LENTER_SPECIAL;
-            } else if (currentTheme == 1) {
+            } else {
                 if (type == T_ENTER) return pressed ? M3_ACCENT : M3_ACCENT;
                 if (type == T_CHAR || type == T_SPACE) return pressed ? 0xFF3A3C41 : M3_KEY;
                 return pressed ? 0xFF4A4D54 : M3_SPECIAL;
-            } else {
-                if (type == T_ENTER) return pressed ? SOFT_ACCENT : SOFT_ACCENT;
-                if (type == T_CHAR || type == T_SPACE) return pressed ? 0xFFE2E2E2 : SOFT_KEY;
-                return pressed ? 0xFFDCDCDC : SOFT_SPECIAL;
             }
         }
 
         private int getBgColor() {
             if (currentTheme == 0) return LENTER_BG;
-            if (currentTheme == 1) return M3_BG;
-            return SOFT_BG;
+            else return M3_BG;
         }
 
         private void drawKey(Canvas canvas, float l, float t, float r, float b, int type, boolean pressed) {
-            float radius;
-            if (currentTheme == 0) {
-                radius = 0;
-            } else if (currentTheme == 1) {
-                radius = radiusPx;
-            } else {
-                radius = 40 * density;
-            }
-
+            float radius = (currentTheme == 0) ? 0 : radiusPx;
             int keyColor = getKeyColor(type, pressed);
             pKeyMain.setColor(keyColor);
-            pKeyMain.setShader(null);
-            pKeyMain.setAntiAlias(true);
-
-            if (!pressed && currentTheme == 1) {
-                pKeyMain.setColor(0xFF121212);
-                canvas.drawRoundRect(l, t + (1.2f * density), r, b + (1.2f * density), radius, radius, pKeyMain);
-                pKeyMain.setColor(keyColor);
-                canvas.drawRoundRect(l, t, r, b, radius, radius, pKeyMain);
-            } else if (pressed && currentTheme == 1) {
-                pKeyMain.setColor(0xFF4A4D54);
-                canvas.drawRoundRect(l, t + (1.0f * density), r, b + (1.0f * density), radius, radius, pKeyMain);
-            } else {
-                if (radius > 0) {
-                    canvas.drawRoundRect(l, t, r, b, radius, radius, pKeyMain);
-                } else {
-                    canvas.drawRect(l, t, r, b, pKeyMain);
-                }
-            }
+            if (radius > 0) canvas.drawRoundRect(l, t, r, b, radius, radius, pKeyMain);
+            else canvas.drawRect(l, t, r, b, pKeyMain);
         }
 
         @Override
         protected void onDraw(Canvas canvas) {
             canvas.drawColor(getBgColor());
-
             canvas.save();
             canvas.translate(translateX, translateY);
             canvas.scale(scale, scale);
 
             if (needRedrawBg || bgBitmap == null || prevWidth != getWidth() || prevHeight != getHeight()) {
                 if (bgBitmap == null || prevWidth != getWidth() || prevHeight != getHeight()) {
+                    if (bgBitmap != null) bgBitmap.recycle();
                     bgBitmap = Bitmap.createBitmap(getWidth(), getHeight(), Bitmap.Config.RGB_565);
                     bgCanvas = new Canvas(bgBitmap);
                     prevWidth = getWidth();
@@ -989,44 +825,34 @@ public class LenterIME extends InputMethodService {
             }
             canvas.drawBitmap(bgBitmap, 0, 0, null);
             drawPressedKeys(canvas);
-
             canvas.restore();
 
             if (isPreviewMode) {
-                Paint borderPaint = new Paint();
-                borderPaint.setStyle(Paint.Style.STROKE);
-                borderPaint.setStrokeWidth(2 * density);
-                borderPaint.setColor(0xFF00FF00);
-                canvas.drawRect(0, 0, getWidth(), getHeight(), borderPaint);
-                borderPaint.setColor(0xFFFFA500);
-                float left = translateX;
-                float top = translateY;
+                pBorder.setColor(0xFF00FF00);
+                canvas.drawRect(0, 0, getWidth(), getHeight(), pBorder);
+                pBorder.setColor(0xFFFFA500);
+                float left = translateX, top = translateY;
                 float right = translateX + screenW * scale;
                 float bottom = translateY + (previewHeight + keyH * 4) * scale;
-                canvas.drawRect(left, top, right, bottom, borderPaint);
+                canvas.drawRect(left, top, right, bottom, pBorder);
             }
         }
 
         private void drawPressedKeys(Canvas canvas) {
             LayoutData d = curLayout;
             if (d == null) return;
-
             for (int i = 0; i < pointerKeys.length; i++) {
                 int key = pointerKeys[i];
                 if (key < 0 || key >= d.count) continue;
-
                 int base = key * 4;
                 float l = d.keyCoords[base] + gapPx;
-                float t = d.keyCoords[base + 1] + gapPx + previewHeight;
-                float r = d.keyCoords[base + 2] - gapPx;
-                float b = d.keyCoords[base + 3] - gapPx + previewHeight;
-
+                float t = d.keyCoords[base+1] + gapPx + previewHeight;
+                float r = d.keyCoords[base+2] - gapPx;
+                float b = d.keyCoords[base+3] - gapPx + previewHeight;
                 drawKey(canvas, l, t, r, b, d.types[key], true);
-
-                if (d.types[key] == T_CHAR && !(d.valuesLen[key] == 1 && d.values[key][0] == ' ') && previewHeight > 0) {
+                if (d.types[key] == T_CHAR && previewHeight > 0) {
                     float cx = (l + r) / 2;
                     float cy = (t + b) / 2;
-
                     if (currentTheme == 0) {
                         float pT = t - previewHeight - 4 * density;
                         float pB = t - 4 * density;
@@ -1034,54 +860,30 @@ public class LenterIME extends InputMethodService {
                         canvas.drawRect(cx - 50, pT, cx + 50, pB, pPre);
                     } else {
                         float cyCircle = cy - 50 * density;
-                        int previewBg = (currentTheme == 1) ? M3_SPECIAL : SOFT_SPECIAL;
-                        pPre.setColor(previewBg);
+                        pPre.setColor(M3_SPECIAL);
                         canvas.drawCircle(cx, cyCircle, previewRadPx, pPre);
                     }
-
                     int idx = (shift > 0) ? d.shiftIdx[key] : d.normalIdx[key];
                     if (idx >= 0) {
                         int col = idx % sAtlasCols;
                         int row = idx / sAtlasCols;
                         tempSrcRect.set(col * sAtlasCellW, row * sAtlasCellH,
-                                (col + 1) * sAtlasCellW, (row + 1) * sAtlasCellH);
+                                (col+1)*sAtlasCellW, (row+1)*sAtlasCellH);
                         float halfW = sAtlasCellW * 0.5f;
                         float halfH = sAtlasCellH * 0.5f;
-
-                        float previewCenterY;
-                        if (currentTheme == 0) {
-                            previewCenterY = (t - previewHeight - 4 * density + t - 4 * density) / 2f;
-                        } else {
-                            previewCenterY = cy - 50 * density;
-                        }
-
+                        float previewCenterY = (currentTheme == 0) ?
+                            (t - previewHeight - 4*density + t - 4*density)/2f : cy - 50*density;
                         tempDstRectF.set(cx - halfW, previewCenterY - halfH, cx + halfW, previewCenterY + halfH);
-
-                        ColorFilter previewFilter;
-                        if (currentTheme == 0) previewFilter = lenterTextFilter;
-                        else if (currentTheme == 1) previewFilter = m3TextFilter;
-                        else previewFilter = softTextFilter;
-                        pAtlas.setColorFilter(previewFilter);
-
+                        pAtlas.setColorFilter(null);
                         canvas.drawBitmap(sGlobalAtlas, tempSrcRect, tempDstRectF, pAtlas);
                     } else {
                         char ch = d.labels[key][0];
                         if (shift > 0) ch = Character.toUpperCase(ch);
-                        tmpChar[0] = ch;
-                        float previewCenterY;
-                        if (currentTheme == 0) {
-                            previewCenterY = (t - previewHeight - 4 * density + t - 4 * density) / 2f;
-                            pPreT.setTextSize(26 * density);
-                        } else {
-                            previewCenterY = cy - 50 * density;
-                            pPreT.setTextSize(26 * density);
-                        }
-                        if (currentTheme == 2) {
-                            pPreT.setColor(SOFT_TEXT);
-                        } else {
-                            pPreT.setColor(Color.WHITE);
-                        }
-                        canvas.drawText(tmpChar, 0, 1, cx, previewCenterY - previewBaselineOffset, pPreT);
+                        float previewCenterY = (currentTheme == 0) ?
+                            (t - previewHeight - 4*density + t - 4*density)/2f : cy - 50*density;
+                        pPreT.setTextSize(26 * density);
+                        pPreT.setColor(Color.WHITE);
+                        canvas.drawText(String.valueOf(ch), cx, previewCenterY - previewBaselineOffset, pPreT);
                     }
                 }
             }
@@ -1090,43 +892,28 @@ public class LenterIME extends InputMethodService {
         private void drawStatic(Canvas cv) {
             LayoutData d = curLayout;
             if (d == null) return;
-
             for (int i = 0; i < d.count; i++) {
                 int base = i * 4;
                 float l = d.keyCoords[base] + gapPx;
-                float t = d.keyCoords[base + 1] + gapPx + previewHeight;
-                float r = d.keyCoords[base + 2] - gapPx;
-                float b = d.keyCoords[base + 3] - gapPx + previewHeight;
-
+                float t = d.keyCoords[base+1] + gapPx + previewHeight;
+                float r = d.keyCoords[base+2] - gapPx;
+                float b = d.keyCoords[base+3] - gapPx + previewHeight;
                 drawKey(cv, l, t, r, b, d.types[i], false);
-
                 float cx = (l + r) / 2;
                 float cy = (t + b) / 2;
 
                 int textColor;
-                ColorFilter filter;
                 if (currentTheme == 0) {
                     textColor = LENTER_TEXT;
-                    filter = lenterTextFilter;
-                } else if (currentTheme == 1) {
-                    if (d.types[i] == T_ENTER) {
-                        textColor = M3_ON_ACCENT;
-                        filter = m3AccentFilter;
-                    } else {
-                        textColor = M3_TEXT;
-                        filter = m3TextFilter;
-                    }
                 } else {
                     if (d.types[i] == T_ENTER) {
-                        textColor = SOFT_ON_ACCENT;
-                        filter = softAccentFilter;
+                        textColor = M3_ON_ACCENT;
                     } else {
-                        textColor = SOFT_TEXT;
-                        filter = softTextFilter;
+                        textColor = M3_TEXT;
                     }
                 }
                 pText.setColor(textColor);
-                pAtlas.setColorFilter(filter);
+                pAtlas.setColorFilter(null);
 
                 if (d.types[i] == T_CHAR) {
                     int idx = (shift > 0) ? d.shiftIdx[i] : d.normalIdx[i];
@@ -1134,7 +921,7 @@ public class LenterIME extends InputMethodService {
                         int col = idx % sAtlasCols;
                         int row = idx / sAtlasCols;
                         tempSrcRect.set(col * sAtlasCellW, row * sAtlasCellH,
-                                (col + 1) * sAtlasCellW, (row + 1) * sAtlasCellH);
+                                (col+1)*sAtlasCellW, (row+1)*sAtlasCellH);
                         float halfW = sAtlasCellW * 0.5f;
                         float halfH = sAtlasCellH * 0.5f;
                         tempDstRectF.set(cx - halfW, cy - halfH, cx + halfW, cy + halfH);
@@ -1142,14 +929,10 @@ public class LenterIME extends InputMethodService {
                     } else {
                         char ch = d.labels[i][0];
                         if (shift > 0) ch = Character.toUpperCase(ch);
-                        tmpChar[0] = ch;
-                        cv.drawText(tmpChar, 0, 1, cx, cy - textBaselineOffset, pText);
+                        cv.drawText(String.valueOf(ch), cx, cy - textBaselineOffset, pText);
                     }
                 } else if (d.types[i] == T_SHIFT) {
-                    char[] shiftLabel;
-                    if (shift == 1) shiftLabel = SHIFT_SINGLE;
-                    else if (shift == 2) shiftLabel = SHIFT_LOCK;
-                    else shiftLabel = SHIFT_NORMAL;
+                    char[] shiftLabel = (shift == 1) ? SHIFT_SINGLE : (shift == 2) ? SHIFT_LOCK : SHIFT_NORMAL;
                     cv.drawText(shiftLabel, 0, shiftLabel.length, cx, cy - textBaselineOffset, pText);
                 } else {
                     cv.drawText(d.labels[i], 0, d.labelsLen[i], cx, cy - textBaselineOffset, pText);
@@ -1166,146 +949,82 @@ public class LenterIME extends InputMethodService {
 
         private void getDirtyRect(LayoutData d, int idx, Rect outRect) {
             int base = idx * 4;
-            float left = d.keyCoords[base];
-            float top = d.keyCoords[base + 1];
-            float right = d.keyCoords[base + 2];
-            float bottom = d.keyCoords[base + 3] + previewHeight;
-
-            left = left * scale + translateX;
-            top = top * scale + translateY;
-            right = right * scale + translateX;
-            bottom = bottom * scale + translateY;
-
+            float left = d.keyCoords[base] * scale + translateX;
+            float top = d.keyCoords[base+1] * scale + translateY;
+            float right = d.keyCoords[base+2] * scale + translateX;
+            float bottom = (d.keyCoords[base+3] + previewHeight) * scale + translateY;
             outRect.left = (int) Math.floor(left);
             outRect.top = (int) Math.floor(top - 90 * density);
             outRect.right = (int) Math.ceil(right);
             outRect.bottom = (int) Math.ceil(bottom);
         }
 
-        private int findEmptyPointerSlot() {
-            for (int i = 0; i < pointerIds.length; i++) {
-                if (pointerIds[i] == -1) return i;
-            }
-            return -1;
-        }
-
-        private int findPointerSlot(int id) {
-            for (int i = 0; i < pointerIds.length; i++) {
-                if (pointerIds[i] == id) return i;
-            }
-            return -1;
-        }
-
         @Override
         public boolean onTouchEvent(MotionEvent e) {
+            LayoutData d = curLayout;
+            if (d == null) return true;
             int action = e.getActionMasked();
             int index = e.getActionIndex();
             int id = e.getPointerId(index);
-
-            LayoutData d = curLayout;
-            if (d == null) return true;
-
-            float rawX = e.getX(index);
-            float rawY = e.getY(index);
-            float x = (rawX - translateX) / scale;
-            float y = (rawY - translateY) / scale;
+            float x = (e.getX(index) - translateX) / scale;
+            float y = (e.getY(index) - translateY) / scale;
 
             if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
                 int k = getK(d, x, y - previewHeight);
                 if (k != -1) {
-                    performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP);
-                    int slot = findEmptyPointerSlot();
-                    if (slot >= 0) {
-                        pointerIds[slot] = id;
-                        pointerKeys[slot] = k;
-                    }
+                    int slot = -1;
+                    for (int i = 0; i < pointerIds.length; i++) if (pointerIds[i] == -1) { slot = i; break; }
+                    if (slot >= 0) { pointerIds[slot] = id; pointerKeys[slot] = k; }
                     if (!isPreviewMode && d.types[k] == T_DEL) {
-                        if (ime.deleteSelected()) {
-                            isDel = false;
-                            h.removeCallbacks(delRunnable);
-                        } else {
-                            ime.deleteChar();
-                            isDel = true;
-                            h.postDelayed(delRunnable, 350);
-                        }
+                        if (ime.deleteSelected()) { isDel = false; h.removeCallbacks(delRunnable); }
+                        else { ime.deleteChar(); isDel = true; h.postDelayed(delRunnable, 350); }
                     }
                     getDirtyRect(d, k, tempRect);
                     invalidate(tempRect);
                 }
             } else if (action == MotionEvent.ACTION_MOVE) {
-                boolean changed = false;
-                Rect dirty = rectPool.obtain();
-                Rect tmp = rectPool.obtain();
-                dirty.setEmpty();
-
+                Rect dirty = new Rect();
                 for (int m = 0; m < e.getPointerCount(); m++) {
                     int pid = e.getPointerId(m);
                     float px = (e.getX(m) - translateX) / scale;
                     float py = (e.getY(m) - translateY) / scale;
                     int nk = getK(d, px, py - previewHeight);
-                    int slot = findPointerSlot(pid);
+                    int slot = -1;
+                    for (int i = 0; i < pointerIds.length; i++) if (pointerIds[i] == pid) { slot = i; break; }
                     if (slot >= 0) {
                         int oldK = pointerKeys[slot];
                         if (oldK != nk) {
-                            if (oldK != -1) {
-                                getDirtyRect(d, oldK, tmp);
-                                dirty.union(tmp);
-                            }
-                            if (nk != -1) {
-                                pointerKeys[slot] = nk;
-                                getDirtyRect(d, nk, tmp);
-                                dirty.union(tmp);
-                            } else {
-                                pointerKeys[slot] = -1;
-                                pointerIds[slot] = -1;
-                            }
-                            changed = true;
+                            if (oldK != -1) { getDirtyRect(d, oldK, tempRect); dirty.union(tempRect); }
+                            if (nk != -1) { pointerKeys[slot] = nk; getDirtyRect(d, nk, tempRect); dirty.union(tempRect); }
+                            else { pointerKeys[slot] = -1; pointerIds[slot] = -1; }
                         }
                     } else if (nk != -1) {
-                        int newSlot = findEmptyPointerSlot();
-                        if (newSlot >= 0) {
-                            pointerIds[newSlot] = pid;
-                            pointerKeys[newSlot] = nk;
-                            getDirtyRect(d, nk, tmp);
-                            dirty.union(tmp);
-                            changed = true;
-                        }
+                        int newSlot = -1;
+                        for (int i = 0; i < pointerIds.length; i++) if (pointerIds[i] == -1) { newSlot = i; break; }
+                        if (newSlot >= 0) { pointerIds[newSlot] = pid; pointerKeys[newSlot] = nk; getDirtyRect(d, nk, tempRect); dirty.union(tempRect); }
                     }
                 }
-                if (changed) invalidate(dirty);
+                if (!dirty.isEmpty()) invalidate(dirty);
             } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP) {
-                int slot = findPointerSlot(id);
+                int slot = -1;
+                for (int i = 0; i < pointerIds.length; i++) if (pointerIds[i] == id) { slot = i; break; }
                 if (slot >= 0) {
                     int k = pointerKeys[slot];
                     if (k != -1) {
-                        if (!isPreviewMode && d.types[k] != T_DEL) {
-                            handle(k);
-                        }
-                        pointerKeys[slot] = -1;
-                        pointerIds[slot] = -1;
-                        if (!isPreviewMode && d.types[k] == T_DEL) {
-                            isDel = false;
-                            h.removeCallbacks(delRunnable);
-                        }
+                        if (!isPreviewMode && d.types[k] != T_DEL) handle(k);
+                        pointerKeys[slot] = -1; pointerIds[slot] = -1;
+                        if (!isPreviewMode && d.types[k] == T_DEL) { isDel = false; h.removeCallbacks(delRunnable); }
                         getDirtyRect(d, k, tempRect);
                         invalidate(tempRect);
                     }
                 }
             } else if (action == MotionEvent.ACTION_CANCEL) {
-                Rect dirty = rectPool.obtain();
-                Rect tmp = rectPool.obtain();
-                dirty.setEmpty();
+                Rect dirty = new Rect();
                 for (int i = 0; i < pointerKeys.length; i++) {
                     int k = pointerKeys[i];
-                    if (k != -1) {
-                        getDirtyRect(d, k, tmp);
-                        dirty.union(tmp);
-                        pointerKeys[i] = -1;
-                        pointerIds[i] = -1;
-                    }
+                    if (k != -1) { getDirtyRect(d, k, tempRect); dirty.union(tempRect); pointerKeys[i] = -1; pointerIds[i] = -1; }
                 }
-                isDel = false;
-                h.removeCallbacks(delRunnable);
+                isDel = false; h.removeCallbacks(delRunnable);
                 if (!dirty.isEmpty()) invalidate(dirty);
             }
             return true;
@@ -1315,16 +1034,11 @@ public class LenterIME extends InputMethodService {
             LayoutData d = curLayout;
             int t = d.types[i];
             char[] v = d.values[i];
-            int vLen = d.valuesLen[i];
-
             if (t == T_CHAR) {
-                String sv = new String(v, 0, vLen);
+                String sv = new String(v);
                 if (shift > 0) {
                     sv = sv.toUpperCase(Locale.ROOT);
-                    if (shift == 1) {
-                        shift = 0;
-                        needRedrawBg = true;
-                    }
+                    if (shift == 1) { shift = 0; needRedrawBg = true; }
                 }
                 ime.commitText(sv);
             } else if (t == T_SHIFT) {
@@ -1364,7 +1078,7 @@ public class LenterIME extends InputMethodService {
                     curLang = LANG_SYM;
                     ensureLayoutBuilt(LANG_SYM);
                     curLayout = layouts[LANG_SYM];
-                } else if (curLang == LANG_NUMERIC || curLang == LANG_DECIMAL) {
+                } else if (curLang == LANG_NUMERIC) {
                     curLang = lastLang;
                     ensureLayoutBuilt(curLang);
                     curLayout = layouts[curLang];

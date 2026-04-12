@@ -43,290 +43,234 @@ import android.widget.TextView;
 public class MainActivity extends Activity {
 
     private SharedPreferences prefs;
-    private LinearLayout normalModeLayout;
-    private RelativeLayout editModeLayout;
-    private LinearLayout root;
+    private LinearLayout normalLayout;
+    private RelativeLayout editLayout;
     private SeekBar seekLeft, seekRight, seekTop, seekBottom;
     private TextView tvLeft, tvRight, tvTop, tvBottom;
     private LenterIME.KeyboardView previewKeyboard;
-    private int maxOffset = 200;
+    private FrameLayout keyboardContainer;
+    private LinearLayout rootLayout;
 
     private int rootPaddingLeft, rootPaddingRight;
     private int editPaddingLeft, editPaddingRight;
 
-    private static final char[] DIVIDER = "------------------------".toCharArray();
-    private static final String[] THEME_NAMES = {"Material", "Soft (мягкий)", "Lenter"};
-    private static final int[] THEME_VALUES = {1, 2, 0};
+    private static final String[] THEME_NAMES = {"Material", "Lenter"};
+    private static final int[] THEME_VALUES = {1, 0};
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(0xFFFFFFFF);
-        root.setPadding(48, 48, 48, 48);
+        prefs = getSharedPreferences("LenterPrefs", MODE_PRIVATE);
 
-        normalModeLayout = new LinearLayout(this);
-        normalModeLayout.setOrientation(LinearLayout.VERTICAL);
-        normalModeLayout.setGravity(Gravity.CENTER);
+        rootLayout = new LinearLayout(this);
+        rootLayout.setOrientation(LinearLayout.VERTICAL);
+        rootLayout.setBackgroundColor(0xFF000000);
+
+        normalLayout = new LinearLayout(this);
+        normalLayout.setOrientation(LinearLayout.VERTICAL);
+        normalLayout.setGravity(Gravity.CENTER_HORIZONTAL);
+        normalLayout.setBackgroundColor(0xFF000000);
+        normalLayout.setPadding(dp(16), dp(24), dp(16), dp(24));
 
         TextView title = new TextView(this);
         title.setText("Lenter Keyboard");
-        title.setTextColor(0xFF000000);
-        title.setTextSize(24);
+        title.setTextColor(0xFFFF6600);
+        title.setTextSize(28);
         title.setTypeface(null, 1);
-        title.setPadding(0, 0, 0, 48);
-        normalModeLayout.addView(title);
+        title.setGravity(Gravity.CENTER);
+        title.setPadding(0, 0, 0, dp(32));
+        normalLayout.addView(title);
 
-        TextView dRU = new TextView(this);
-        dRU.setText("Lenter: Лёгкая клавиатура с мгновенным откликом! Нажмите “Активировать” и нажмите на нашу клавиатуру, потом в настройки → расширенные настройки → язык и ввод → текущая клавиатура, и выберите нашу. Готово!");
-        dRU.setTextColor(0xFF000000);
-        dRU.setTextSize(14);
-        dRU.setPadding(0, 0, 0, 24);
-        dRU.setGravity(Gravity.CENTER);
-        normalModeLayout.addView(dRU);
-
-        TextView dEN = new TextView(this);
-        dEN.setText("Lenter: Lightweight keyboard with instant response! Press “Activate” and tap our keyboard, then go to settings → advanced → language & input → current keyboard and select ours. Done!");
-        dEN.setTextColor(0xFF000000);
-        dEN.setTextSize(14);
-        dEN.setPadding(0, 0, 0, 32);
-        dEN.setGravity(Gravity.CENTER);
-        normalModeLayout.addView(dEN);
-
-        TextView rz = new TextView(this);
-        rz.setText(new String(DIVIDER));
-        rz.setTextColor(0xFF000000);
-        rz.setTextSize(14);
-        rz.setPadding(0, 0, 0, 16);
-        rz.setGravity(Gravity.CENTER);
-        normalModeLayout.addView(rz);
-
-        TextView bsRU = new TextView(this);
-        bsRU.setText("Функция для разбитых экранов: если часть дисплея не работает, вы можете сдвинуть клавиатуру в рабочую зону. Нажмите “Break screen” и настройте отступы.");
-        bsRU.setTextColor(0xFF000000);
-        bsRU.setTextSize(12);
-        bsRU.setPadding(0, 0, 0, 16);
-        bsRU.setGravity(Gravity.CENTER);
-        normalModeLayout.addView(bsRU);
-
-        TextView bsEN = new TextView(this);
-        bsEN.setText("Broken screen feature: if part of the screen is broken, you can shift the keyboard into the working area. Press “Break screen” and adjust the offsets.");
-        bsEN.setTextColor(0xFF000000);
-        bsEN.setTextSize(12);
-        bsEN.setPadding(0, 0, 0, 32);
-        bsEN.setGravity(Gravity.CENTER);
-        normalModeLayout.addView(bsEN);
-
-        TextView btnActivate = new TextView(this);
-        btnActivate.setText("АКТИВИРОВАТЬ");
-        btnActivate.setTextColor(0xFFFFFFFF);
-        btnActivate.setBackgroundColor(0xFF252525);
-        btnActivate.setPadding(80, 40, 80, 40);
-        btnActivate.setOnClickListener(new View.OnClickListener() {
+        addButton(normalLayout, "Activate", new View.OnClickListener() {
             public void onClick(View v) {
                 startActivity(new Intent(Settings.ACTION_INPUT_METHOD_SETTINGS));
             }
         });
-        FrameLayout btnWrap = new FrameLayout(this);
-        btnWrap.addView(btnActivate);
-        normalModeLayout.addView(btnWrap);
 
-        TextView krz = new TextView(this);
-        krz.setText(new String(DIVIDER));
-        krz.setTextColor(0xFF000000);
-        krz.setTextSize(14);
-        krz.setPadding(0, 0, 0, 16);
-        krz.setGravity(Gravity.CENTER);
-        normalModeLayout.addView(krz);
-
-        TextView btnBreak = new TextView(this);
-        btnBreak.setText("Break screen");
-        btnBreak.setTextColor(0xFFFFFFFF);
-        btnBreak.setBackgroundColor(0xFF252525);
-        btnBreak.setPadding(80, 40, 80, 40);
-        btnBreak.setOnClickListener(new View.OnClickListener() {
+        addButton(normalLayout, "Break screen", new View.OnClickListener() {
             public void onClick(View v) {
                 showEditMode();
             }
         });
-        FrameLayout btnBreakWrap = new FrameLayout(this);
-        btnBreakWrap.addView(btnBreak);
-        normalModeLayout.addView(btnBreakWrap);
 
-        TextView themeDescRU = new TextView(this);
-        themeDescRU.setText("Выберите тему оформления клавиатуры: нажмите “Тема” и выберите вариант.");
-        themeDescRU.setTextColor(0xFF000000);
-        themeDescRU.setTextSize(12);
-        themeDescRU.setPadding(0, 0, 0, 16);
-        themeDescRU.setGravity(Gravity.CENTER);
-        normalModeLayout.addView(themeDescRU);
-
-        TextView themeDescEN = new TextView(this);
-        themeDescEN.setText("Choose keyboard theme: press “Theme” and select an option.");
-        themeDescEN.setTextColor(0xFF000000);
-        themeDescEN.setTextSize(12);
-        themeDescEN.setPadding(0, 0, 0, 32);
-        themeDescEN.setGravity(Gravity.CENTER);
-        normalModeLayout.addView(themeDescEN);
-
-        TextView btnTheme = new TextView(this);
-        btnTheme.setText("Тема");
-        btnTheme.setTextColor(0xFFFFFFFF);
-        btnTheme.setBackgroundColor(0xFF252525);
-        btnTheme.setPadding(80, 40, 80, 40);
-        btnTheme.setOnClickListener(new View.OnClickListener() {
+        addButton(normalLayout, "Theme", new View.OnClickListener() {
             public void onClick(View v) {
                 showThemeDialog();
             }
         });
-        FrameLayout btnThemeWrap = new FrameLayout(this);
-        btnThemeWrap.addView(btnTheme);
-        normalModeLayout.addView(btnThemeWrap);
 
-        root.addView(normalModeLayout);
-
-        editModeLayout = new RelativeLayout(this);
-        editModeLayout.setBackgroundColor(0xFFFFFFFF);
-        editModeLayout.setVisibility(View.GONE);
-
-        LinearLayout controlsPanel = new LinearLayout(this);
-        controlsPanel.setOrientation(LinearLayout.VERTICAL);
-        controlsPanel.setPadding(24, 24, 24, 24);
-        controlsPanel.setBackgroundColor(0xFFEEEEEE);
-
-        TextView editTitle = new TextView(this);
-        editTitle.setText("Настройка битых зон экрана / Broken screen adjustment");
-        editTitle.setTextSize(18);
-        editTitle.setTextColor(0xFF000000);
-        editTitle.setPadding(0, 0, 0, 24);
-        controlsPanel.addView(editTitle);
-
-        LinearLayout leftRow = createRow("Слева / Left (px):");
-        seekLeft = (SeekBar) leftRow.getTag();
-        tvLeft = (TextView) leftRow.findViewById(android.R.id.text1);
-        controlsPanel.addView(leftRow);
-
-        LinearLayout rightRow = createRow("Справа / Right (px):");
-        seekRight = (SeekBar) rightRow.getTag();
-        tvRight = (TextView) rightRow.findViewById(android.R.id.text1);
-        controlsPanel.addView(rightRow);
-
-        LinearLayout topRow = createRow("Сверху / Top (px):");
-        seekTop = (SeekBar) topRow.getTag();
-        tvTop = (TextView) topRow.findViewById(android.R.id.text1);
-        controlsPanel.addView(topRow);
-
-        LinearLayout bottomRow = createRow("Снизу / Bottom (px):");
-        seekBottom = (SeekBar) bottomRow.getTag();
-        tvBottom = (TextView) bottomRow.findViewById(android.R.id.text1);
-        controlsPanel.addView(bottomRow);
-
-        TextView btnSave = new TextView(this);
-        btnSave.setText("Готово / Done");
-        btnSave.setTextColor(0xFFFFFFFF);
-        btnSave.setBackgroundColor(0xFF252525);
-        btnSave.setPadding(80, 40, 80, 40);
-        btnSave.setOnClickListener(new View.OnClickListener() {
+        TextView helpButton = new TextView(this);
+        helpButton.setText("?");
+        helpButton.setTextColor(0xFFFF6600);
+        helpButton.setTextSize(24);
+        helpButton.setGravity(Gravity.CENTER);
+        helpButton.setPadding(dp(16), dp(12), dp(16), dp(12));
+        helpButton.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
-                saveSettingsAndExit();
+                showHelpDialog();
             }
         });
-        controlsPanel.addView(btnSave);
+        normalLayout.addView(helpButton);
+
+        rootLayout.addView(normalLayout);
+
+        editLayout = new RelativeLayout(this);
+        editLayout.setBackgroundColor(0xFF000000);
+        editLayout.setVisibility(View.GONE);
+
+        LinearLayout controls = new LinearLayout(this);
+        controls.setOrientation(LinearLayout.VERTICAL);
+        controls.setPadding(dp(16), dp(16), dp(16), dp(16));
+        controls.setBackgroundColor(0xFF111111);
+
+        TextView editTitle = new TextView(this);
+        editTitle.setText("Broken screen adjustment");
+        editTitle.setTextColor(0xFFFF6600);
+        editTitle.setTextSize(18);
+        editTitle.setTypeface(null, 1);
+        editTitle.setPadding(0, 0, 0, dp(16));
+        controls.addView(editTitle);
+
+        LinearLayout leftRow = createSeekRow("Left:", 0);
+        seekLeft = (SeekBar) leftRow.getTag();
+        tvLeft = (TextView) leftRow.findViewById(android.R.id.text1);
+        controls.addView(leftRow);
+
+        LinearLayout rightRow = createSeekRow("Right:", 1);
+        seekRight = (SeekBar) rightRow.getTag();
+        tvRight = (TextView) rightRow.findViewById(android.R.id.text1);
+        controls.addView(rightRow);
+
+        LinearLayout topRow = createSeekRow("Top:", 2);
+        seekTop = (SeekBar) topRow.getTag();
+        tvTop = (TextView) topRow.findViewById(android.R.id.text1);
+        controls.addView(topRow);
+
+        LinearLayout bottomRow = createSeekRow("Bottom:", 3);
+        seekBottom = (SeekBar) bottomRow.getTag();
+        tvBottom = (TextView) bottomRow.findViewById(android.R.id.text1);
+        controls.addView(bottomRow);
+
+        LinearLayout buttonRow = new LinearLayout(this);
+        buttonRow.setOrientation(LinearLayout.HORIZONTAL);
+        buttonRow.setPadding(0, dp(16), 0, 0);
+
+        TextView saveBtn = new TextView(this);
+        saveBtn.setText("Save");
+        saveBtn.setTextColor(0xFFFF6600);
+        saveBtn.setBackgroundColor(0xFF666666);
+        saveBtn.setGravity(Gravity.CENTER);
+        saveBtn.setPadding(dp(16), dp(12), dp(16), dp(12));
+        saveBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                saveAndExit();
+            }
+        });
+        LinearLayout.LayoutParams saveParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        saveParams.setMargins(0, 0, dp(8), 0);
+        saveBtn.setLayoutParams(saveParams);
+        buttonRow.addView(saveBtn);
+
+        TextView cancelBtn = new TextView(this);
+        cancelBtn.setText("Cancel");
+        cancelBtn.setTextColor(0xFFFF6600);
+        cancelBtn.setBackgroundColor(0xFF666666);
+        cancelBtn.setGravity(Gravity.CENTER);
+        cancelBtn.setPadding(dp(16), dp(12), dp(16), dp(12));
+        cancelBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                exitEditMode();
+            }
+        });
+        LinearLayout.LayoutParams cancelParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        cancelParams.setMargins(dp(8), 0, 0, 0);
+        cancelBtn.setLayoutParams(cancelParams);
+        buttonRow.addView(cancelBtn);
+
+        controls.addView(buttonRow);
 
         RelativeLayout.LayoutParams controlsParams = new RelativeLayout.LayoutParams(
                 RelativeLayout.LayoutParams.MATCH_PARENT,
                 RelativeLayout.LayoutParams.WRAP_CONTENT);
         controlsParams.addRule(RelativeLayout.ALIGN_PARENT_TOP);
-        editModeLayout.addView(controlsPanel, controlsParams);
+        editLayout.addView(controls, controlsParams);
 
-        FrameLayout keyboardContainer = new FrameLayout(this);
-        keyboardContainer.setPadding(0, 16, 0, 0);
-
+        keyboardContainer = new FrameLayout(this);
+        keyboardContainer.setPadding(0, dp(16), 0, 0);
         RelativeLayout.LayoutParams keyboardParams = new RelativeLayout.LayoutParams(
                 RelativeLayout.LayoutParams.MATCH_PARENT,
                 RelativeLayout.LayoutParams.WRAP_CONTENT);
         keyboardParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
-        editModeLayout.addView(keyboardContainer, keyboardParams);
+        editLayout.addView(keyboardContainer, keyboardParams);
 
-        root.addView(editModeLayout);
-        setContentView(root);
+        rootLayout.addView(editLayout);
+        setContentView(rootLayout);
 
-        prefs = getSharedPreferences("LenterPrefs", MODE_PRIVATE);
-        loadSettingsIntoSeekBars();
-
-        createPreviewKeyboard(keyboardContainer);
+        loadSeekValues();
     }
 
-    private LinearLayout createRow(String labelText) {
+    private void addButton(LinearLayout parent, String text, View.OnClickListener listener) {
+        TextView btn = new TextView(this);
+        btn.setText(text);
+        btn.setTextColor(0xFFFF6600);
+        btn.setBackgroundColor(0xFF666666);
+        btn.setGravity(Gravity.CENTER);
+        btn.setPadding(dp(16), dp(14), dp(16), dp(14));
+        btn.setTextSize(16);
+        btn.setTypeface(null, 1);
+        btn.setOnClickListener(listener);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, 0, 0, dp(12));
+        btn.setLayoutParams(params);
+        parent.addView(btn);
+    }
+
+    private LinearLayout createSeekRow(String label, int id) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setPadding(0, 8, 0, 8);
+        row.setPadding(0, dp(8), 0, dp(8));
 
-        TextView label = new TextView(this);
-        label.setText(labelText);
-        label.setTextColor(0xFF000000);
-        label.setWidth(200);
-        row.addView(label);
+        TextView labelView = new TextView(this);
+        labelView.setText(label);
+        labelView.setTextColor(0xFFFF6600);
+        labelView.setWidth(dp(80));
+        row.addView(labelView);
 
         SeekBar seek = new SeekBar(this);
-        seek.setMax(maxOffset);
-        LinearLayout.LayoutParams seekParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        seek.setMax(200);
+        LinearLayout.LayoutParams seekParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
         seek.setLayoutParams(seekParams);
         row.addView(seek);
 
         TextView value = new TextView(this);
         value.setId(android.R.id.text1);
+        value.setTextColor(0xFFFF6600);
         value.setText("0");
-        value.setWidth(80);
-        value.setTextColor(0xFF000000);
+        value.setWidth(dp(60));
         row.addView(value);
 
         row.setTag(seek);
         seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                TextView tv = (TextView) ((View) seekBar.getParent()).findViewById(android.R.id.text1);
-                tv.setText(String.valueOf(progress));
+            public void onProgressChanged(SeekBar s, int p, boolean fromUser) {
+                TextView tv = (TextView) ((View) s.getParent()).findViewById(android.R.id.text1);
+                tv.setText(String.valueOf(p));
                 updatePreviewOffsets();
             }
-            public void onStartTrackingTouch(SeekBar seekBar) {}
-            public void onStopTrackingTouch(SeekBar seekBar) {}
+            public void onStartTrackingTouch(SeekBar s) {}
+            public void onStopTrackingTouch(SeekBar s) {}
         });
 
         return row;
     }
 
-    private void createPreviewKeyboard(FrameLayout container) {
-        float density = getResources().getDisplayMetrics().density;
-        int height = (int) (260 * density + 0.5f);
-        String lang = prefs.getString("active_lang", "ru");
-
-        previewKeyboard = new LenterIME.KeyboardView(this);
-        previewKeyboard.setIsPreviewMode(true);
-        previewKeyboard.setParams(height, lang);
-        previewKeyboard.setOffsets(seekLeft.getProgress(), seekRight.getProgress(),
-                                   seekTop.getProgress(), seekBottom.getProgress());
-        previewKeyboard.setTheme(prefs.getInt("theme", 1));
-
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, height);
-        container.addView(previewKeyboard, params);
-    }
-
-    private void updatePreviewOffsets() {
-        if (previewKeyboard != null) {
-            previewKeyboard.setOffsets(seekLeft.getProgress(), seekRight.getProgress(),
-                                       seekTop.getProgress(), seekBottom.getProgress());
-        }
-    }
-
-    private void loadSettingsIntoSeekBars() {
+    private void loadSeekValues() {
         int left = prefs.getInt("broken_left", 0);
         int right = prefs.getInt("broken_right", 0);
         int top = prefs.getInt("broken_top", 0);
         int bottom = prefs.getInt("broken_bottom", 0);
-
         if (seekLeft != null) {
             seekLeft.setProgress(left);
             tvLeft.setText(String.valueOf(left));
@@ -339,21 +283,45 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void saveSettingsAndExit() {
+    private void updatePreviewOffsets() {
+        if (previewKeyboard != null) {
+            previewKeyboard.setOffsets(seekLeft.getProgress(), seekRight.getProgress(),
+                                       seekTop.getProgress(), seekBottom.getProgress());
+        }
+    }
+
+    private void saveAndExit() {
         SharedPreferences.Editor editor = prefs.edit();
         editor.putInt("broken_left", seekLeft.getProgress());
         editor.putInt("broken_right", seekRight.getProgress());
         editor.putInt("broken_top", seekTop.getProgress());
         editor.putInt("broken_bottom", seekBottom.getProgress());
         editor.apply();
-
         LenterIME.updateOffsets(this);
         exitEditMode();
     }
 
+    private void showHelpDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Help / Помощь");
+        builder.setMessage(
+            "Activate / Активировать\n" +
+            "Tap Activate → Select Lenter Keyboard → Switch to it\n" +
+            "Нажмите Активировать → выберите Lenter Keyboard → переключитесь на клавиатуру\n\n" +
+            "Break screen / Битый экран\n" +
+            "Move keyboard to working area if part of screen is broken\n" +
+            "Сдвиньте клавиатуру в рабочую зону, если часть экрана не работает\n\n" +
+            "Theme / Тема\n" +
+            "2 themes available: Material, Lenter\n" +
+            "Доступно 2 темы: Material, Lenter"
+        );
+        builder.setPositiveButton("Got it / Понятно", null);
+        builder.show();
+    }
+
     private void showThemeDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("Выберите тему / Select theme");
+        builder.setTitle("Select theme / Выберите тему");
         builder.setItems(THEME_NAMES, new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialog, int which) {
                 int theme = THEME_VALUES[which];
@@ -367,31 +335,50 @@ public class MainActivity extends Activity {
         builder.show();
     }
 
-    private void showEditMode() {
-        rootPaddingLeft = root.getPaddingLeft();
-        rootPaddingRight = root.getPaddingRight();
-        editPaddingLeft = editModeLayout.getPaddingLeft();
-        editPaddingRight = editModeLayout.getPaddingRight();
+ private void showEditMode() {
+    rootPaddingLeft = rootLayout.getPaddingLeft();
+    rootPaddingRight = rootLayout.getPaddingRight();
+    editPaddingLeft = editLayout.getPaddingLeft();
+    editPaddingRight = editLayout.getPaddingRight();
 
-        root.setPadding(0, root.getPaddingTop(), 0, root.getPaddingBottom());
-        editModeLayout.setPadding(0, editModeLayout.getPaddingTop(), 0, editModeLayout.getPaddingBottom());
+    rootLayout.setPadding(0, rootLayout.getPaddingTop(), 0, rootLayout.getPaddingBottom());
+    editLayout.setPadding(0, editLayout.getPaddingTop(), 0, editLayout.getPaddingBottom());
 
-        normalModeLayout.setVisibility(View.GONE);
-        editModeLayout.setVisibility(View.VISIBLE);
+    normalLayout.setVisibility(View.GONE);
+    editLayout.setVisibility(View.VISIBLE);
 
-        if (previewKeyboard != null) {
-            FrameLayout parent = (FrameLayout) previewKeyboard.getParent();
-            parent.removeView(previewKeyboard);
-            createPreviewKeyboard(parent);
-            updatePreviewOffsets();
-        }
+    int currentTheme = prefs.getInt("theme", 1);
+    String lang = prefs.getString("active_lang", "ru");
+    float density = getResources().getDisplayMetrics().density;
+    int height = (int) (260 * density + 0.5f);
+
+    if (previewKeyboard == null && keyboardContainer != null) {
+        previewKeyboard = new LenterIME.KeyboardView(this);
+        previewKeyboard.setIsPreviewMode(true);
+        previewKeyboard.setParams(height, lang);
+        previewKeyboard.setOffsets(seekLeft.getProgress(), seekRight.getProgress(),
+                                   seekTop.getProgress(), seekBottom.getProgress());
+        previewKeyboard.setTheme(currentTheme);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, height);
+        keyboardContainer.addView(previewKeyboard, params);
+    } else if (previewKeyboard != null) {
+        previewKeyboard.setTheme(currentTheme);
+        previewKeyboard.setLanguage(lang);
+        previewKeyboard.setParams(height, lang);
+        previewKeyboard.setOffsets(seekLeft.getProgress(), seekRight.getProgress(),
+                                   seekTop.getProgress(), seekBottom.getProgress());
     }
+}
 
     private void exitEditMode() {
-        root.setPadding(rootPaddingLeft, root.getPaddingTop(), rootPaddingRight, root.getPaddingBottom());
-        editModeLayout.setPadding(editPaddingLeft, editModeLayout.getPaddingTop(), editPaddingRight, editModeLayout.getPaddingBottom());
+        rootLayout.setPadding(rootPaddingLeft, rootLayout.getPaddingTop(), rootPaddingRight, rootLayout.getPaddingBottom());
+        editLayout.setPadding(editPaddingLeft, editLayout.getPaddingTop(), editPaddingRight, editLayout.getPaddingBottom());
+        editLayout.setVisibility(View.GONE);
+        normalLayout.setVisibility(View.VISIBLE);
+    }
 
-        editModeLayout.setVisibility(View.GONE);
-        normalModeLayout.setVisibility(View.VISIBLE);
+    private int dp(int dp) {
+        return (int) (dp * getResources().getDisplayMetrics().density + 0.5f);
     }
 }
