@@ -101,7 +101,7 @@ public class MainActivity extends Activity {
         });
 
         TextView helpButton = new TextView(this);
-        helpButton.setText("?");
+        helpButton.setText("? Help ?");
         helpButton.setTextColor(0xFFFF6600);
         helpButton.setTextSize(24);
         helpButton.setGravity(Gravity.CENTER);
