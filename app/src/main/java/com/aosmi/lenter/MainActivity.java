@@ -1,3 +1,4 @@
+// MainActivity.java
 package com.aosmi.lenter;
 
 /*
@@ -30,6 +31,8 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
@@ -56,6 +59,9 @@ public class MainActivity extends Activity {
 
     private static final String[] THEME_NAMES = {"Material", "Lenter"};
     private static final int[] THEME_VALUES = {1, 0};
+
+    private final Handler debounceHandler = new Handler(Looper.getMainLooper());
+    private Runnable pendingUpdate;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -257,13 +263,32 @@ public class MainActivity extends Activity {
             public void onProgressChanged(SeekBar s, int p, boolean fromUser) {
                 TextView tv = (TextView) ((View) s.getParent()).findViewById(android.R.id.text1);
                 tv.setText(String.valueOf(p));
-                updatePreviewOffsets();
+                if (fromUser) schedulePreviewUpdate();
             }
             public void onStartTrackingTouch(SeekBar s) {}
-            public void onStopTrackingTouch(SeekBar s) {}
+            public void onStopTrackingTouch(SeekBar s) {
+                if (previewKeyboard != null) {
+                    previewKeyboard.setOffsets(seekLeft.getProgress(), seekRight.getProgress(),
+                            seekTop.getProgress(), seekBottom.getProgress());
+                }
+            }
         });
 
         return row;
+    }
+
+    private void schedulePreviewUpdate() {
+        if (pendingUpdate != null) debounceHandler.removeCallbacks(pendingUpdate);
+        pendingUpdate = new Runnable() {
+            @Override
+            public void run() {
+                if (previewKeyboard != null) {
+                    previewKeyboard.setOffsets(seekLeft.getProgress(), seekRight.getProgress(),
+                            seekTop.getProgress(), seekBottom.getProgress());
+                }
+            }
+        };
+        debounceHandler.postDelayed(pendingUpdate, 50);
     }
 
     private void loadSeekValues() {
@@ -286,7 +311,7 @@ public class MainActivity extends Activity {
     private void updatePreviewOffsets() {
         if (previewKeyboard != null) {
             previewKeyboard.setOffsets(seekLeft.getProgress(), seekRight.getProgress(),
-                                       seekTop.getProgress(), seekBottom.getProgress());
+                    seekTop.getProgress(), seekBottom.getProgress());
         }
     }
 
@@ -335,41 +360,41 @@ public class MainActivity extends Activity {
         builder.show();
     }
 
- private void showEditMode() {
-    rootPaddingLeft = rootLayout.getPaddingLeft();
-    rootPaddingRight = rootLayout.getPaddingRight();
-    editPaddingLeft = editLayout.getPaddingLeft();
-    editPaddingRight = editLayout.getPaddingRight();
+    private void showEditMode() {
+        rootPaddingLeft = rootLayout.getPaddingLeft();
+        rootPaddingRight = rootLayout.getPaddingRight();
+        editPaddingLeft = editLayout.getPaddingLeft();
+        editPaddingRight = editLayout.getPaddingRight();
 
-    rootLayout.setPadding(0, rootLayout.getPaddingTop(), 0, rootLayout.getPaddingBottom());
-    editLayout.setPadding(0, editLayout.getPaddingTop(), 0, editLayout.getPaddingBottom());
+        rootLayout.setPadding(0, rootLayout.getPaddingTop(), 0, rootLayout.getPaddingBottom());
+        editLayout.setPadding(0, editLayout.getPaddingTop(), 0, editLayout.getPaddingBottom());
 
-    normalLayout.setVisibility(View.GONE);
-    editLayout.setVisibility(View.VISIBLE);
+        normalLayout.setVisibility(View.GONE);
+        editLayout.setVisibility(View.VISIBLE);
 
-    int currentTheme = prefs.getInt("theme", 1);
-    String lang = prefs.getString("active_lang", "ru");
-    float density = getResources().getDisplayMetrics().density;
-    int height = (int) (260 * density + 0.5f);
+        int currentTheme = prefs.getInt("theme", 1);
+        String lang = prefs.getString("active_lang", "ru");
+        float density = getResources().getDisplayMetrics().density;
+        int height = (int) (260 * density + 0.5f);
 
-    if (previewKeyboard == null && keyboardContainer != null) {
-        previewKeyboard = new LenterIME.KeyboardView(this);
-        previewKeyboard.setIsPreviewMode(true);
-        previewKeyboard.setParams(height, lang);
-        previewKeyboard.setOffsets(seekLeft.getProgress(), seekRight.getProgress(),
-                                   seekTop.getProgress(), seekBottom.getProgress());
-        previewKeyboard.setTheme(currentTheme);
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, height);
-        keyboardContainer.addView(previewKeyboard, params);
-    } else if (previewKeyboard != null) {
-        previewKeyboard.setTheme(currentTheme);
-        previewKeyboard.setLanguage(lang);
-        previewKeyboard.setParams(height, lang);
-        previewKeyboard.setOffsets(seekLeft.getProgress(), seekRight.getProgress(),
-                                   seekTop.getProgress(), seekBottom.getProgress());
+        if (previewKeyboard == null && keyboardContainer != null) {
+            previewKeyboard = new LenterIME.KeyboardView(this);
+            previewKeyboard.setIsPreviewMode(true);
+            previewKeyboard.setParams(height, lang);
+            previewKeyboard.setOffsets(seekLeft.getProgress(), seekRight.getProgress(),
+                    seekTop.getProgress(), seekBottom.getProgress());
+            previewKeyboard.setTheme(currentTheme);
+            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, height);
+            keyboardContainer.addView(previewKeyboard, params);
+        } else if (previewKeyboard != null) {
+            previewKeyboard.setTheme(currentTheme);
+            previewKeyboard.setLanguage(lang);
+            previewKeyboard.setParams(height, lang);
+            previewKeyboard.setOffsets(seekLeft.getProgress(), seekRight.getProgress(),
+                    seekTop.getProgress(), seekBottom.getProgress());
+        }
     }
-}
 
     private void exitEditMode() {
         rootLayout.setPadding(rootPaddingLeft, rootLayout.getPaddingTop(), rootPaddingRight, rootLayout.getPaddingBottom());
